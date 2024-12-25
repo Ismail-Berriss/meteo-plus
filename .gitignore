@@ -151,3 +151,5 @@ expo-env.d.ts
 *.pem
 
 .idea
+
+test.tsx
