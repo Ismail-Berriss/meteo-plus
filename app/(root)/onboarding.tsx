@@ -1,13 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Image, View, Text } from "react-native";
+import { Image, View, Text, Alert } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import Swiper from "react-native-swiper";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-
 import { onboarding } from "@/constants";
 import CustomButton from "@/components/CustomButton";
-import { requestLocationPermission } from "@/utils/permissionsUtils";
+import { requestLocationPermission, checkLocationServices } from "@/utils/permissionsUtils";
 import { getCurrentLocation } from "@/utils/locationUtils";
 import { saveLocationToAsyncStorage } from "@/utils/storageUtils";
 import UserLocation from "@/utils/model/UserLocation";
@@ -20,32 +19,38 @@ const OnboardingScreen = () => {
   const [hasPermission, setHasPermission] = useState<boolean>(false);
 
   const isLastSlide = activeIndex === onboarding.length - 1;
-
-  const fetchLocation = async () => {
+  const handleLocationRequest = async () => {
     try {
-      const isPermited = await requestLocationPermission();
-      setHasPermission(isPermited);
-
-      console.log(`Location Permission: ${hasPermission}`);
-      if (hasPermission) {
-        const currentLocation = await getCurrentLocation();
-
-        if (currentLocation) {
-          setLocation(currentLocation);
-          setError(null);
-
-          await saveLocationToAsyncStorage(currentLocation);
-        } else {
-          console.error("Location Error:", error);
-          setLocation(null);
-          setError("Failed to fetch location.");
-        }
+      // Check if GPS is enabled
+      const isGpsEnabled = await checkLocationServices();
+      if (!isGpsEnabled) {
+        console.log("User declined to enable GPS.");
+        return; // Stop here, as the user might still enable GPS manually
+      }
+  
+      // Request location permission
+      const isPermissionGranted = await requestLocationPermission();
+      if (!isPermissionGranted) {
+        router.replace("/(root)/add-city");
+        return;
+      }
+  
+      // Fetch current location if permission granted
+      const currentLocation = await getCurrentLocation();
+      if (currentLocation) {
+        setLocation(currentLocation);
+        await saveLocationToAsyncStorage(currentLocation);
+        setError(null);
+        console.log("Location saved:", currentLocation);
+      } else {
+        setError("Failed to fetch location.");
       }
     } catch (e) {
-      setError("An expected error has occurred.");
+      console.error("Unexpected error in handleLocationRequest:", e);
+      setError("An unexpected error occurred while processing location.");
     }
   };
-
+  
   return (
     <SafeAreaProvider>
       <LinearGradient colors={["#456bee", "#f0f8ff"]} className="flex-1">
@@ -88,7 +93,7 @@ const OnboardingScreen = () => {
             <CustomButton
               title="Enable Location"
               bgVariant="secondary"
-              onPress={fetchLocation}
+              onPress={handleLocationRequest}
               className="w-11/12 mt-10 mb-1"
             />
           )}
