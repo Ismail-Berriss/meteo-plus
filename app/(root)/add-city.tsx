@@ -97,7 +97,7 @@ const AddCityScreen = () => {
               borderRadius: 5,
               marginTop: 10,
             }}
-            onPress={() => navigation.push('/login')}
+            onPress={() => navigation.push('/home')}
           >
             <Text style={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>OK</Text>
           </TouchableOpacity>
