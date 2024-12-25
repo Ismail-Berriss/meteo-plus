@@ -1,67 +1,73 @@
-import { Alert, Platform } from "react-native";
+
+// Permissions Utilities
 import * as Location from "expo-location";
 
+import { Alert, Platform } from "react-native";
 const checkLocationServices = async () => {
   const isEnabled = await Location.hasServicesEnabledAsync();
-  if (isEnabled) {
-    return true;
-  } else {
-    Alert.alert(
-      "Enable Location Services",
-      "Please enable location services in your device settings to proceed.",
-      [
-        {
-          text: "Go to Settings",
-          onPress: () => {
-            Location.enableNetworkProviderAsync();
+
+  if (!isEnabled) {
+    return new Promise((resolve) => {
+      Alert.alert(
+        "Enable Location Services",
+        "Location services are disabled. Please enable them in your device settings to continue.",
+        [
+          {
+            text: "Go to Settings",
+            onPress: async () => {
+              try {
+                await Location.enableNetworkProviderAsync();
+                resolve(true);
+              } catch (error) {
+                console.error("Error enabling location services:", error);
+                Alert.alert("Error", "Unable to open location settings.");
+                resolve(false);
+              }
+            },
           },
-        },
-        { text: "Cancel", style: "cancel" },
-      ],
-    );
-    return false;
+          {
+            text: "Cancel",
+            style: "cancel",
+            onPress: () => resolve(false),
+          },
+        ]
+      );
+    });
   }
+
+  return true;
 };
+
 
 const requestLocationPermission = async () => {
   try {
-    const servicesEnabled = await checkLocationServices();
-    if (!servicesEnabled) return false;
-
-    // Check current permission status
     const { status } = await Location.getForegroundPermissionsAsync();
+
     if (status === "granted") {
-      Alert.alert(
-        "Permission Granted",
-        "You already have location permissions!",
-      );
+      console.log("Location permission already granted.");
       return true;
     }
 
-    // Request permissions is not already granted
-    const { status: newStatus } =
-      await Location.requestForegroundPermissionsAsync();
+    const { status: newStatus } = await Location.requestForegroundPermissionsAsync();
+
     if (newStatus === "granted") {
-      Alert.alert(
-        "Permission Granted",
-        "Location permission has been granted!",
-      );
+      console.log("Location permission granted.");
       return true;
     } else {
       Alert.alert(
         "Permission Denied",
-        "Location permission is required to access this feature.",
+        "Location permission is required to access this feature. Please allow it in your settings."
       );
       return false;
     }
-  } catch (e) {
-    console.error("Error requesting location permission:", e);
+  } catch (error) {
+    console.error("Error requesting location permission:", error);
     Alert.alert(
       "Error",
-      "An error occurred while requesting location permission.",
+      "An unexpected error occurred while requesting location permission. Please try again."
     );
     return false;
   }
 };
 
-export { requestLocationPermission };
+export { requestLocationPermission, checkLocationServices };
