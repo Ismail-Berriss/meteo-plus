@@ -6,7 +6,7 @@ const saveLocationToAsyncStorage = async (location: UserLocation) => {
   try {
     await AsyncStorage.setItem("userLocation", JSON.stringify(location));
 
-    console.log("Location saved to Async Storage");
+    console.log("Location saved to Async Storage" ,JSON.stringify(location));
   } catch (e) {
     console.error(`Async storage error: ${e}`);
   }

@@ -1,0 +1,3 @@
+export const ACCUWEATHER_API_KEY="H0tDE7v2KWEMZ4fGDpoGNSxuxWpNv0Q7";
+//"y8ci7NWJ7JfOpOXJFgahy8H1qXzFUrAT";
+//"QBbyAx6BXOnEahVGNtfVBwSxxbZlFx3T";

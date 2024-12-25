@@ -34,7 +34,7 @@ const OnboardingScreen = () => {
         router.replace("/(root)/add-city");
         return;
       }
-  
+      setHasPermission(true);
       // Fetch current location if permission granted
       const currentLocation = await getCurrentLocation();
       if (currentLocation) {

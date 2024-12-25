@@ -5,9 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-
-
-const ACCUWEATHER_API_KEY = 'QBbyAx6BXOnEahVGNtfVBwSxxbZlFx3T';
+import { ACCUWEATHER_API_KEY } from "@/api";
 const AddCityScreen = () => {
   const [key,setKey]=useState('');
 
@@ -35,6 +33,7 @@ const AddCityScreen = () => {
       await AsyncStorage.setItem('city-key', city.Key);
       console.log("the key stored:",city.Key);
       await AsyncStorage.setItem('city-name', city.LocalizedName);
+      await AsyncStorage.setItem('country-name', city.Country.LocalizedName);
 
       navigation.navigate('/home');
     } catch (error) {

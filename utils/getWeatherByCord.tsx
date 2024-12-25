@@ -1,1 +1,45 @@
-//http://dataservice.accuweather.com/locations/v1/cities/geoposition/search
+const fetchCityWeatherInfo = async (
+    latitude: number,
+    longitude: number,
+    apiKey: string
+  ): Promise<CityWeatherInfo | null> => {
+    const locationSearchUrl = `http://dataservice.accuweather.com/locations/v1/cities/geoposition/search?apikey=${apiKey}&q=${latitude},${longitude}`;
+    const currentConditionsUrl = (locationKey: string) =>
+      `http://dataservice.accuweather.com/currentconditions/v1/${locationKey}?apikey=${apiKey}`;
+  
+    try {
+      // Step 1: Get location info
+      const locationResponse = await fetch(locationSearchUrl);
+      if (!locationResponse.ok) {
+        throw new Error("Failed to fetch location data");
+      }
+      const locationData = await locationResponse.json();
+  
+      const cityName = locationData.LocalizedName;
+      const countryName = locationData.Country.LocalizedName;
+      const locationKey = locationData.Key;
+  
+      // Step 2: Get weather info
+      const weatherResponse = await fetch(currentConditionsUrl(locationKey));
+      if (!weatherResponse.ok) {
+        throw new Error("Failed to fetch weather data");
+      }
+      const weatherData = await weatherResponse.json();
+  
+      const weatherText = weatherData[0].WeatherText;
+      const temperature = weatherData[0].Temperature.Metric.Value;
+  
+      return {
+        cityName,
+        countryName,
+        weatherText,
+        temperature,
+      };
+    } catch (error) {
+      console.error("Error fetching city weather info:", error);
+      return null;
+    }
+  };
+  
+  export default fetchCityWeatherInfo;
+  
