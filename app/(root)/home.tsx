@@ -1,46 +1,13 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Plus } from "lucide-react-native";
-import { LinearGradient } from "expo-linear-gradient";
 
-import { requestLocationPermission } from "@/utils/permissionsUtils";
-import { getCurrentLocation } from "@/utils/locationUtils";
-import UserLocation from "@/utils/model/UserLocation";
-import { saveLocationToAsyncStorage } from "@/utils/storageUtils";
+import { LinearGradient } from "expo-linear-gradient";
 
 const HomeScreen = () => {
   const [firstColor, setFirstColor] = useState<string>("#456bee");
   const [secondColor, setSecondColor] = useState<string>("#f0f8ff");
-  const [location, setLocation] = useState<UserLocation | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchLocation = async () => {
-      try {
-        const hasPermission = await requestLocationPermission();
-
-        if (hasPermission) {
-          const currentLocation = await getCurrentLocation();
-
-          if (currentLocation) {
-            setLocation(currentLocation);
-            setError(null);
-
-            await saveLocationToAsyncStorage(currentLocation);
-          } else {
-            console.error("Location Error:", error);
-            setLocation(null);
-            setError("Failed to fetch location.");
-          }
-        }
-      } catch (e) {
-        setError("An expected error has occurred.");
-      }
-    };
-
-    fetchLocation();
-  }, []);
 
   return (
     <SafeAreaProvider>

@@ -149,3 +149,5 @@ expo-env.d.ts
 # macOS
 .DS_Store
 *.pem
+
+.idea
