@@ -4,43 +4,60 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import { City } from '@/utils/model/city';
 import { ACCUWEATHER_API_KEY } from "@/api";
-const AddCityScreen = () => {
-  const [key,setKey]=useState('');
 
+const AddCityScreen = () => {
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const navigation = useRouter();
 
-  
-
   const getAutocompleteSuggestions = async () => {
     if (query.length < 3) return;
+
     try {
       const response = await fetch(
         `https://dataservice.accuweather.com/locations/v1/cities/autocomplete?apikey=${ACCUWEATHER_API_KEY}&q=${query}`
       );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch autocomplete suggestions');
+      }
+
       const data = await response.json();
       setSuggestions(data.slice(0, 5));
     } catch (error) {
       console.error('Error fetching autocomplete suggestions:', error);
     }
   };
+
   const handleSelectCity = async (city) => {
     try {
-      console.log("the city:",city);
-      await AsyncStorage.setItem('city-key', city.Key);
-      console.log("the key stored:",city.Key);
-      await AsyncStorage.setItem('city-name', city.LocalizedName);
-      await AsyncStorage.setItem('country-name', city.Country.LocalizedName);
-
-      navigation.navigate('/home');
+      const weatherUrl = `http://dataservice.accuweather.com/currentconditions/v1/${city.Key}?apikey=${ACCUWEATHER_API_KEY}`;
+      const response = await fetch(weatherUrl);
+      const weatherData = await response.json();
+      const weather = weatherData[0];
+      
+      const selectedCity = new City(
+        city.Key,
+        city.LocalizedName,
+        city.Country.LocalizedName,
+        city.GeoPosition?.Latitude || null,
+        city.GeoPosition?.Longitude || null,
+        "secondary",
+        weather.Temperature?.Metric?.Value || null,
+        weather.WeatherText || null
+      );
+  
+      const storedCities = await AsyncStorage.getItem("cities");
+      const cities = storedCities ? JSON.parse(storedCities) : [];
+      cities.push(selectedCity.toObject());
+      await AsyncStorage.setItem("cities", JSON.stringify(cities));
     } catch (error) {
-      console.error('Error saving city key:', error);
+      console.error("Error saving city:", error);
     }
   };
-
+  
   return (
     <SafeAreaProvider>
       <LinearGradient
@@ -49,8 +66,22 @@ const AddCityScreen = () => {
         end={{ x: 1, y: 1 }}
         style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
       >
-        <View style={{ backgroundColor: 'white', padding: 20, borderRadius: 10, width: '90%' }}>
-          <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' }}>
+        <View
+          style={{
+            backgroundColor: 'white',
+            padding: 20,
+            borderRadius: 10,
+            width: '90%',
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 20,
+              fontWeight: 'bold',
+              marginBottom: 10,
+              textAlign: 'center',
+            }}
+          >
             Choose Your Main City
           </Text>
           <TextInput
@@ -99,7 +130,15 @@ const AddCityScreen = () => {
             }}
             onPress={() => navigation.push('/home')}
           >
-            <Text style={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>OK</Text>
+            <Text
+              style={{
+                color: 'white',
+                fontWeight: 'bold',
+                textAlign: 'center',
+              }}
+            >
+              OK
+            </Text>
           </TouchableOpacity>
         </View>
       </LinearGradient>

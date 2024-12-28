@@ -10,8 +10,15 @@ import { requestLocationPermission, checkLocationServices } from "@/utils/permis
 import { getCurrentLocation } from "@/utils/locationUtils";
 import { saveLocationToAsyncStorage } from "@/utils/storageUtils";
 import UserLocation from "@/utils/model/UserLocation";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const OnboardingScreen = () => {
+
+ 
+const setFirstUseTrue=()=>{
+AsyncStorage.setItem("first-use","true");
+};
+
   const swiperRef = useRef<Swiper>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [location, setLocation] = useState<UserLocation | null>(null);
@@ -98,17 +105,23 @@ const OnboardingScreen = () => {
             />
           )}
 
-          <CustomButton
-            title={isLastSlide ? "Get Started" : "Next"}
-            onPress={() =>
-              isLastSlide
-                ? hasPermission
-                  ? router.replace("/(root)/home")
-                  : router.replace("/(root)/add-city")
-                : swiperRef.current?.scrollBy(1)
+        <CustomButton
+          title={isLastSlide ? "Get Started" : "Next"}
+          onPress={() => {
+            setFirstUseTrue();
+            if (isLastSlide) {
+              if (hasPermission) {
+                router.replace("/(root)/home");
+              } else {
+                router.replace("/(root)/add-city");
+              }
+            } else {
+              swiperRef.current?.scrollBy(1);
             }
-            className="w-11/12 mt-5 mb-5"
-          />
+          }}
+          className="w-11/12 mt-5 mb-5"
+        />
+
         </SafeAreaView>
       </LinearGradient>
     </SafeAreaProvider>

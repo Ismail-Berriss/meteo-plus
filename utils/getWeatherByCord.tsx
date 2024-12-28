@@ -1,3 +1,10 @@
+interface CityWeatherInfo {
+  name: string; // The name of the city
+  country: string; // The name of the country
+  weatherText: string; // Description of the weather (e.g., "Sunny", "Cloudy")
+  temperature: number; // Current temperature in Celsius
+}
+
 const fetchCityWeatherInfo = async (
     latitude: number,
     longitude: number,
@@ -15,8 +22,8 @@ const fetchCityWeatherInfo = async (
       }
       const locationData = await locationResponse.json();
   
-      const cityName = locationData.LocalizedName;
-      const countryName = locationData.Country.LocalizedName;
+      const name = locationData.LocalizedName;
+      const country = locationData.Country.LocalizedName;
       const locationKey = locationData.Key;
   
       // Step 2: Get weather info
@@ -30,8 +37,8 @@ const fetchCityWeatherInfo = async (
       const temperature = weatherData[0].Temperature.Metric.Value;
   
       return {
-        cityName,
-        countryName,
+        name,
+        country,
         weatherText,
         temperature,
       };

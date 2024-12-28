@@ -1,58 +1,82 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface WeatherInfo {
-    cityName: string;
-    countryName: string;
-    weatherText: string;
-    temperature: number; // In Celsius
+  name: string;
+  country: string;
+  weatherText: string;
+  temperature: number; // In Celsius
+}
+
+const getCitiesFromStorage = async (): Promise<any[] | null> => {
+  try {
+    const citiesString = await AsyncStorage.getItem("cities");
+    return citiesString ? JSON.parse(citiesString) : null;
+  } catch (error) {
+    console.error("Error retrieving cities from AsyncStorage:", error);
+    return null;
   }
-  
-  const fetchWeatherByCityKey = async (
-    cityKey: string,
-    apiKey: string
-  ): Promise<WeatherInfo | null> => {
-    const weatherUrl = `http://dataservice.accuweather.com/currentconditions/v1/${cityKey}?apikey=${apiKey}`;
-  
-    try {
-      // Fetch the weather data using the cityKey
-      const weatherResponse = await fetch(weatherUrl);
-      if (!weatherResponse.ok) {
-        throw new Error("Failed to fetch weather data");
-      }
-  
-      const weatherData = await weatherResponse.json();
-  
-      // Check if the weatherData is valid and contains the expected structure
-      if (!weatherData || weatherData.length === 0) {
-        throw new Error("No weather data found for the provided city key.");
-      }
-  
-      // Extract weather details from the API response
-      const weather = weatherData[0];
-  
-      // Fetch the city name and country name from AsyncStorage
-      const cityNameFromStorage = await AsyncStorage.getItem("city-name");
-      const countryNameFromStorage = await AsyncStorage.getItem("country-name");
-  
-      // Default to the values from AsyncStorage if available, otherwise use data from API
-      const cityName = cityNameFromStorage || weather.LocalizedName || "Unknown City";
-      const countryName = countryNameFromStorage || "Unknown Country"; // Assuming you have country info in AsyncStorage
-  
-      const weatherText = weather.WeatherText || "No weather information available";
-      const temperature = weather.Temperature?.Metric?.Value || 0;
-  
-      // Return the weather info
-      return {
-        cityName,
-        countryName,
-        weatherText,
-        temperature,
-      };
-    } catch (error) {
-      console.error("Error fetching weather data:", error);
-      return null;
+};
+
+const fetchWeatherData = async (
+  cityKey: string,
+  apiKey: string
+): Promise<any | null> => {
+  const weatherUrl = `http://dataservice.accuweather.com/currentconditions/v1/${cityKey}?apikey=${apiKey}`;
+  try {
+    const weatherResponse = await fetch(weatherUrl);
+    if (!weatherResponse.ok) {
+      throw new Error("Failed to fetch weather data");
     }
-  };
-  
-  export default fetchWeatherByCityKey;
-  
+    const weatherData = await weatherResponse.json();
+    return weatherData?.[0] || null;
+  } catch (error) {
+    console.error("Error fetching weather data:", error);
+    return null;
+  }
+};
+
+const fetchWeatherByCityKey = async (
+  cityKey: string,
+  apiKey: string
+): Promise<WeatherInfo | null> => {
+  try {
+    // Fetch weather data from API
+    const weather = await fetchWeatherData(cityKey, apiKey);
+
+    if (!weather) {
+      throw new Error("No weather data found for the provided city key.");
+    }
+
+    // Retrieve cities from AsyncStorage
+    const cities = await getCitiesFromStorage();
+
+    let name = "Unknown City";
+    let country = "Unknown Country";
+
+    if (cities && cities.length > 1) {
+      const secondCity = cities[1]; // Access the second item in the array
+      name = secondCity?.name || name;
+      country = secondCity?.country || country;
+    } else {
+      console.warn(
+        "Second city is null, undefined, or the cities array is empty."
+      );
+    }
+
+    const weatherText = weather.WeatherText || "No weather information available";
+    const temperature = weather.Temperature?.Metric?.Value || 0;
+
+    // Return the consolidated weather info
+    return {
+      name,
+      country,
+      weatherText,
+      temperature,
+    };
+  } catch (error) {
+    console.error("Error fetching weather by city key:", error);
+    return null;
+  }
+};
+
+export default fetchWeatherByCityKey;

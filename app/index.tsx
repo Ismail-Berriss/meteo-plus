@@ -1,7 +1,26 @@
+import React, { useState, useEffect } from "react";
 import { Redirect } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const Page = () => {
-  return <Redirect href="/(root)/onboarding" />;
+  
+  const [isFirstUse, setIsFirstUse] = useState<null | boolean>(null);
+
+  useEffect(() => {
+    const checkFirstUse = async () => {
+      const value = await AsyncStorage.getItem("first-use");
+      setIsFirstUse(value === "true");
+      console.log("is first use:",value);
+    };
+    checkFirstUse();
+  }, []);
+
+  if (isFirstUse === null) {
+    // Optional: Render a loading screen or nothing while waiting for AsyncStorage
+    return null;
+  }
+
+  return <Redirect href={isFirstUse ? "/(root)/home" : "/(root)/onboarding"} />;
 };
 
 export default Page;
