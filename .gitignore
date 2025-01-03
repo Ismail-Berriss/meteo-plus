@@ -153,3 +153,4 @@ expo-env.d.ts
 .idea
 
 test.tsx
+api.js

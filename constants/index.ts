@@ -1,5 +1,6 @@
 import onboardingPlaceholder from "@/assets/images/onboarding-placeholder.jpg";
 import morning from "@/assets/images/morning.jpg";
+import morning_list from "@/assets/images/morning_list.jpg";
 
 import onb1 from "@/assets/images/onb1.png";
 import onb2 from "@/assets/images/onb2.png";
@@ -8,11 +9,12 @@ import onb4 from "@/assets/images/onb4.png";
 
 export const images = {
   onboardingPlaceholder,
-  morning,
   onb1,
   onb2,
   onb3,
   onb4,
+  morning,
+  morning_list,
 };
 
 export const onboarding = [

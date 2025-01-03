@@ -9,8 +9,15 @@ const Layout = () => {
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="home" options={{ headerShown: false }} />
         <Stack.Screen name="add-city" options={{ headerShown: false }} />
-        <Stack.Screen name="manageCities" options={{ headerShown: false }} />
-
+        <Stack.Screen
+          name="manageCities"
+          options={{
+            headerShown: true,
+            headerTransparent: true,
+            headerTitle: "Manage Cities",
+            headerTintColor: "white",
+          }}
+        />
       </Stack>
       <StatusBar style="auto" />
     </>

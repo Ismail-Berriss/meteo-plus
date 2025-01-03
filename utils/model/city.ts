@@ -28,6 +28,22 @@ class City {
     this.weatherText = weatherText;
   }
 
+  public getKey(): string | null {
+    return this.key;
+  }
+
+  public setKey(key: string | null) {
+    this.key = key;
+  }
+
+  public getName(): string | null {
+    return this.name;
+  }
+
+  public setName(name: string | null) {
+    this.name = name;
+  }
+
   public getLatitude(): number | null {
     return this.latitude;
   }

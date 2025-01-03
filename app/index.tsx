@@ -19,9 +19,7 @@ const Page = () => {
     return null;
   }
 
-  return (
-    <Redirect href={isFirstUse ? "/(root)/onboarding" : "/(root)/onboarding"} />
-  );
+  return <Redirect href={isFirstUse ? "/(root)/home" : "/(root)/onboarding"} />;
 };
 
 export default Page;
