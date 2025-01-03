@@ -1,8 +1,6 @@
-// Permissions Utilities
 import * as Location from "expo-location";
 
 import { Alert, Platform } from "react-native";
-import * as Location from "expo-location";
 import { Audio } from "expo-av";
 
 const checkLocationServices = async () => {

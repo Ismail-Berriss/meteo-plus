@@ -1,6 +1,5 @@
 export const ACCUWEATHER_API_KEY="13I0AHMXPAlKs28YL7T3LgqiNuFyCqKG";
 //"QBbyAx6BXOnEahVGNtfVBwSxxbZlFx3T";
-export const ACCUWEATHER_API_KEY = "y8ci7NWJ7JfOpOXJFgahy8H1qXzFUrAT...";
 
 //"y8ci7NWJ7JfOpOXJFgahy8H1qXzFUrAT";
 
