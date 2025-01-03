@@ -1,8 +1,10 @@
-
 // Permissions Utilities
 import * as Location from "expo-location";
-import { Audio } from "expo-av";
+
 import { Alert, Platform } from "react-native";
+import * as Location from "expo-location";
+import { Audio } from "expo-av";
+
 const checkLocationServices = async () => {
   const isEnabled = await Location.hasServicesEnabledAsync();
 
@@ -30,7 +32,7 @@ const checkLocationServices = async () => {
             style: "cancel",
             onPress: () => resolve(false),
           },
-        ]
+        ],
       );
     });
   }
@@ -38,23 +40,7 @@ const checkLocationServices = async () => {
   return true;
 };
 
-const getMicrophonePermission = async () => {
-  try {
-    const { granted } = await Audio.requestPermissionsAsync();
 
-    if (!granted) {
-      Alert.alert(
-        "Permission",
-        "Please grant permission to access microphone"
-      );
-      return false;
-    }
-    return true;
-  } catch (error) {
-    console.log(error);
-    return false;
-  }
-};
 const requestLocationPermission = async () => {
   try {
     const { status } = await Location.getForegroundPermissionsAsync();
@@ -64,7 +50,8 @@ const requestLocationPermission = async () => {
       return true;
     }
 
-    const { status: newStatus } = await Location.requestForegroundPermissionsAsync();
+    const { status: newStatus } =
+      await Location.requestForegroundPermissionsAsync();
 
     if (newStatus === "granted") {
       console.log("Location permission granted.");
@@ -72,7 +59,7 @@ const requestLocationPermission = async () => {
     } else {
       Alert.alert(
         "Permission Denied",
-        "Location permission is required to access this feature. Please allow it in your settings."
+        "Location permission is required to access this feature. Please allow it in your settings.",
       );
       return false;
     }
@@ -80,10 +67,10 @@ const requestLocationPermission = async () => {
     console.error("Error requesting location permission:", error);
     Alert.alert(
       "Error",
-      "An unexpected error occurred while requesting location permission. Please try again."
+      "An unexpected error occurred while requesting location permission. Please try again.",
     );
     return false;
   }
 };
 
-export { requestLocationPermission, checkLocationServices,getMicrophonePermission };
+export { requestLocationPermission, checkLocationServices };

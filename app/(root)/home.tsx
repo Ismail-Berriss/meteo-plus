@@ -1,82 +1,88 @@
-import { useEffect, useState } from "react";
-import {ActivityIndicator,Alert,Modal,StyleSheet,Text,TouchableOpacity,View,} from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  ImageBackground,
+} from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { Mic, Plus } from "lucide-react-native";
-import fetchCityWeatherInfo from "@/utils/getWeatherByCord";
-import { router } from "expo-router";
-import { ACCUWEATHER_API_KEY } from "@/api";
-import { LinearGradient } from "expo-linear-gradient";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import fetchWeatherByCityKey from "@/utils/getWeatherByCityKey";
 import Swiper from "react-native-swiper";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Mic, Plus } from "lucide-react-native";
+import { router } from "expo-router";
+
+import { ACCUWEATHER_API_KEY } from "@/api";
+import { images } from "@/constants";
+import fetchCityWeatherInfo from "@/utils/getWeatherByCord";
+import fetchWeatherByCityKey from "@/utils/getWeatherByCityKey";
 import City from "@/utils/model/city";
-interface WeatherForecast {
-  day: string;
-  high: number;
-  low: number;
-}
-
-interface WeatherInfo {
-  name: string;
-  country: string;
-  temperature: number;
-  weatherText: string;
-}
-
+import { WeatherForecast, WeatherInfo } from "@/types/type";
 
 const HomeScreen = () => {
-  const [firstColor, setFirstColor] = useState<string>("#456bee");
-  const [secondColor, setSecondColor] = useState<string>("#f0f8ff");
   const [modalVisible, setModalVisible] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [citiesWeather, setCitiesWeather] = useState<(WeatherInfo | null)[]>([]);
   const [forecast, setForecast] = useState<WeatherForecast[]>([]);
+  const [citiesWeather, setCitiesWeather] = useState<(WeatherInfo | null)[]>(
+    [],
+  );
+
   useEffect(() => {
     const fetchWeatherForCities = async () => {
       try {
         // Get cities from AsyncStorage
-        const citiesString = await AsyncStorage.getItem('cities');
+        const citiesString = await AsyncStorage.getItem("cities");
+
         console.log("cities upon home first call ", citiesString);
+
         if (!citiesString) {
           console.log("No cities found in storage");
           return;
         }
-  
+
         const cities: City[] = JSON.parse(citiesString);
         const firstTwoCities = cities.slice(0, 2);
         console.log("firstTwoCities", firstTwoCities);
         // Fetch weather for each city
         const weatherPromises = firstTwoCities.map(async (city, index) => {
           try {
-            let weatherInfo = null;
+            let weatherInfo: WeatherInfo | null = null;
 
             if (city.key) {
-              // If city has a city key, fetch weather using that
-              weatherInfo = await fetchWeatherByCityKey(city.key, ACCUWEATHER_API_KEY);
+              // If city has a city key, fetch weather using it
+              weatherInfo = await fetchWeatherByCityKey(
+                city.key,
+                ACCUWEATHER_API_KEY,
+              );
+
               console.log("fetch weather info of key in HOME", weatherInfo);
+
               return weatherInfo;
             } else if (city.latitude && city.longitude) {
-              // If city has coordinates, fetch weather using those
+              // If city has coordinates, fetch weather using them
               console.log("fetch coord", city);
+
               weatherInfo = await fetchCityWeatherInfo(
                 city.latitude,
                 city.longitude,
-                ACCUWEATHER_API_KEY
+                ACCUWEATHER_API_KEY,
               );
 
-        
               if (weatherInfo && index === 0) {
                 // Update the first city in the array with fetched details
                 setCitiesWeather((prevCities) => {
                   const updatedCities = [...prevCities];
                   updatedCities[0] = {
                     ...updatedCities[0],
-                    name: weatherInfo.name,
-                    country: weatherInfo.country,
-                    latitude:city.latitude,
+                    name: weatherInfo?.name,
+                    country: weatherInfo?.country,
+                    latitude: city.latitude,
                     longitude: city.longitude,
-                    weatherText: weatherInfo.weatherText,
-                    temperature: weatherInfo.temperature,
+                    weatherText: weatherInfo?.weatherText,
+                    temperature: weatherInfo?.temperature,
                   };
                   // Save updated cities to AsyncStorage
                   AsyncStorage.setItem("cities", JSON.stringify(updatedCities));
@@ -85,18 +91,16 @@ const HomeScreen = () => {
               }
               return weatherInfo;
             }
-            
           } catch (error) {
             console.error("Error fetching weather for city:", error);
             return null;
           }
         });
-        
+
         const weatherResults = await Promise.all(weatherPromises);
-  
+
         setCitiesWeather(weatherResults);
-     
-  
+
         // Set static forecast data (replace with actual API call if needed)
         setForecast([
           { day: "Monday", high: 24, low: 12 },
@@ -108,10 +112,9 @@ const HomeScreen = () => {
         Alert.alert("Error", "Failed to fetch weather data.");
       }
     };
-  
+
     fetchWeatherForCities();
   }, []);
-  
 
   const handleMicrophonePress = () => {
     setModalVisible(true);
@@ -133,12 +136,14 @@ const HomeScreen = () => {
           <Text style={styles.countryText}>{weatherInfo.country}</Text>
           <Text style={styles.tempText}>{`${weatherInfo.temperature}°C`}</Text>
           <Text style={styles.weatherText}>{weatherInfo.weatherText}</Text>
-          
+
           <View style={styles.forecastContainer}>
             {forecast.map((item, index) => (
               <View key={index} style={styles.forecastRow}>
                 <Text style={styles.forecastText}>{item.day}</Text>
-                <Text style={styles.forecastText}>{`${item.high}°/${item.low}°`}</Text>
+                <Text
+                  style={styles.forecastText}
+                >{`${item.high}°/${item.low}°`}</Text>
               </View>
             ))}
           </View>
@@ -151,7 +156,11 @@ const HomeScreen = () => {
 
   return (
     <SafeAreaProvider>
-      <LinearGradient colors={[firstColor, secondColor]} style={styles.container}>
+      <ImageBackground
+        source={images.morning}
+        style={styles.container}
+        resizeMode="cover"
+      >
         <TouchableOpacity
           style={styles.plusButton}
           onPress={() => router.push("/(root)/manageCities")}
@@ -173,7 +182,10 @@ const HomeScreen = () => {
           ))}
         </Swiper>
 
-        <TouchableOpacity style={styles.micButton} onPress={handleMicrophonePress}>
+        <TouchableOpacity
+          style={styles.micButton}
+          onPress={handleMicrophonePress}
+        >
           <Mic size={28} color="white" />
         </TouchableOpacity>
 
@@ -189,18 +201,27 @@ const HomeScreen = () => {
               {isListening ? (
                 <Text style={styles.listeningText}>I'm listening...</Text>
               ) : (
-                <Text style={styles.modalDescription}>Tap the mic and start talking!</Text>
+                <Text style={styles.modalDescription}>
+                  Tap the mic and start talking!
+                </Text>
               )}
               {isListening && (
-                <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 20 }} />
+                <ActivityIndicator
+                  size="large"
+                  color="#007AFF"
+                  style={{ marginTop: 20 }}
+                />
               )}
-              <TouchableOpacity style={styles.closeButton} onPress={handleModalClose}>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={handleModalClose}
+              >
                 <Text style={styles.closeButtonText}>Close</Text>
               </TouchableOpacity>
             </View>
           </View>
         </Modal>
-      </LinearGradient>
+      </ImageBackground>
     </SafeAreaProvider>
   );
 };

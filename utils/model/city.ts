@@ -1,7 +1,7 @@
-export class City {
-  key: string; // Unique city key from AccuWeather API
-  name: string; // Localized city name
-  country: string; // Localized country name
+class City {
+  key: string | null; // Unique city key from AccuWeather API
+  name: string | null; // Localized city name
+  country: string | null; // Localized country name
   latitude: number | null; // Latitude (nullable)
   longitude: number | null; // Longitude (nullable)
   type: string; // Type of city, e.g., primary or secondary
@@ -9,14 +9,14 @@ export class City {
   weatherText: string | null; // Weather description (nullable)
 
   constructor(
-    key: string,
-    name: string,
-    country: string,
+    key: string | null,
+    name: string | null,
+    country: string | null,
     latitude: number | null = null,
     longitude: number | null = null,
     type: string = "secondary",
     temperature: number | null = null,
-    weatherText: string | null = null
+    weatherText: string | null = null,
   ) {
     this.key = key;
     this.name = name;
@@ -26,6 +26,22 @@ export class City {
     this.type = type;
     this.temperature = temperature;
     this.weatherText = weatherText;
+  }
+
+  public getLatitude(): number | null {
+    return this.latitude;
+  }
+
+  public setLatitude(latitude: number | null) {
+    this.latitude = latitude;
+  }
+
+  public getLongitude(): number | null {
+    return this.longitude;
+  }
+
+  public setLongitude(longitude: number | null) {
+    this.longitude = longitude;
   }
 
   /**
@@ -67,7 +83,9 @@ export class City {
       obj.longitude,
       type,
       obj.temperature,
-      obj.weatherText
+      obj.weatherText,
     );
   }
 }
+
+export default City;

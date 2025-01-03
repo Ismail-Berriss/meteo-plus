@@ -1,48 +1,45 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Image, View, Text, Alert } from "react-native";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import React, { useRef, useState } from "react";
+import { Image, View, Text, ImageBackground } from "react-native";
 import Swiper from "react-native-swiper";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-import { LinearGradient } from "expo-linear-gradient";
-import { onboarding } from "@/constants";
+
+import { images, onboarding } from "@/constants";
 import CustomButton from "@/components/CustomButton";
-import { requestLocationPermission, checkLocationServices } from "@/utils/permissionsUtils";
+import {
+  requestLocationPermission,
+  checkLocationServices,
+} from "@/utils/permissionsUtils";
 import { getCurrentLocation } from "@/utils/locationUtils";
 import { saveLocationToAsyncStorage } from "@/utils/storageUtils";
 import UserLocation from "@/utils/model/UserLocation";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const OnboardingScreen = () => {
-
- 
-const setFirstUseTrue=()=>{
-AsyncStorage.setItem("first-use","true");
-};
+  const setFirstUseTrue = () => {
+    AsyncStorage.setItem("first-use", "true");
+  };
 
   const swiperRef = useRef<Swiper>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [location, setLocation] = useState<UserLocation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean>(false);
+  const [isLocationActive, setLocationActive] = useState<boolean>(false);
 
   const isLastSlide = activeIndex === onboarding.length - 1;
+
   const handleLocationRequest = async () => {
     try {
-      // Check if GPS is enabled
-      const isGpsEnabled = await checkLocationServices();
-      if (!isGpsEnabled) {
-        console.log("User declined to enable GPS.");
-        return; // Stop here, as the user might still enable GPS manually
-      }
-  
       // Request location permission
       const isPermissionGranted = await requestLocationPermission();
-      if (!isPermissionGranted) {
-        router.replace("/(root)/add-city");
-        return;
-      }
-      setHasPermission(true);
-      // Fetch current location if permission granted
+      setHasPermission(isPermissionGranted);
+
+      // Check if GPS is enabled
+      const isGpsEnabled: boolean = await checkLocationServices();
+      setLocationActive(isGpsEnabled);
+
+      // Fetch current location if permission granted & location is enabled
       const currentLocation = await getCurrentLocation();
       if (currentLocation) {
         setLocation(currentLocation);
@@ -57,10 +54,11 @@ AsyncStorage.setItem("first-use","true");
       setError("An unexpected error occurred while processing location.");
     }
   };
-  
+
   return (
     <SafeAreaProvider>
-      <LinearGradient colors={["#456bee", "#f0f8ff"]} className="flex-1">
+      {/* <LinearGradient colors={["#456bee", "#f0f8ff"]} className="flex-1"> */}
+      <ImageBackground source={images.morning} resizeMode="cover">
         <SafeAreaView className="flex h-full items-center justify-between">
           <Swiper
             ref={swiperRef}
@@ -80,7 +78,7 @@ AsyncStorage.setItem("first-use","true");
               >
                 <Image
                   source={item.image}
-                  className="w-full h-[300px]"
+                  className="w-full h-[250px] mb-10"
                   resizeMode="contain"
                 />
 
@@ -98,32 +96,41 @@ AsyncStorage.setItem("first-use","true");
 
           {activeIndex === 2 && (
             <CustomButton
-              title="Enable Location"
-              bgVariant="secondary"
+              title={
+                hasPermission
+                  ? isLocationActive
+                    ? "Location Fetched"
+                    : "Enable Location"
+                  : "Grant Location Permission"
+              }
+              bgVariant={
+                hasPermission && isLocationActive ? "success" : "danger"
+              }
               onPress={handleLocationRequest}
               className="w-11/12 mt-10 mb-1"
+              disabled={hasPermission && isLocationActive ? true : false}
             />
           )}
 
-        <CustomButton
-          title={isLastSlide ? "Get Started" : "Next"}
-          onPress={() => {
-            setFirstUseTrue();
-            if (isLastSlide) {
-              if (hasPermission) {
-                router.replace("/(root)/home");
+          <CustomButton
+            title={isLastSlide ? "Get Started" : "Next"}
+            onPress={() => {
+              setFirstUseTrue();
+              if (isLastSlide) {
+                if (hasPermission) {
+                  router.replace("/(root)/home");
+                } else {
+                  router.replace("/(root)/add-city");
+                }
               } else {
-                router.replace("/(root)/add-city");
+                swiperRef.current?.scrollBy(1);
               }
-            } else {
-              swiperRef.current?.scrollBy(1);
-            }
-          }}
-          className="w-11/12 mt-5 mb-5"
-        />
-
+            }}
+            className="w-11/12 mt-5 mb-5"
+          />
         </SafeAreaView>
-      </LinearGradient>
+        {/* </LinearGradient> */}
+      </ImageBackground>
     </SafeAreaProvider>
   );
 };
