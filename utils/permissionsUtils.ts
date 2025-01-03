@@ -1,6 +1,6 @@
-// Permissions Utilities
-import { Alert, Platform } from "react-native";
 import * as Location from "expo-location";
+
+import { Alert, Platform } from "react-native";
 import { Audio } from "expo-av";
 
 const checkLocationServices = async () => {
@@ -38,6 +38,7 @@ const checkLocationServices = async () => {
   return true;
 };
 
+
 const requestLocationPermission = async () => {
   try {
     const { status } = await Location.getForegroundPermissionsAsync();
@@ -70,23 +71,4 @@ const requestLocationPermission = async () => {
   }
 };
 
-const requestMicrophonePermission = async () => {
-  try {
-    const { granted } = await Audio.requestPermissionsAsync();
-
-    if (!granted) {
-      Alert.alert("Permission", "Please grant permission to access microphone");
-      return false;
-    }
-    return true;
-  } catch (error) {
-    console.log(error);
-    return false;
-  }
-};
-
-export {
-  requestLocationPermission,
-  checkLocationServices,
-  requestMicrophonePermission,
-};
+export { requestLocationPermission, checkLocationServices };

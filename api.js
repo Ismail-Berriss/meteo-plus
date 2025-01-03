@@ -1,4 +1,9 @@
+<<<<<<< HEAD
 export const ACCUWEATHER_API_KEY = "H0tDE7v2KWEMZ4fGDpoGNSxuxWpNv0Q7";
+=======
+export const ACCUWEATHER_API_KEY="13I0AHMXPAlKs28YL7T3LgqiNuFyCqKG";
+//"QBbyAx6BXOnEahVGNtfVBwSxxbZlFx3T";
+>>>>>>> da8915b50ce29b3370aacfdb8acd2eeb6bff18fa
 
 //"y8ci7NWJ7JfOpOXJFgahy8H1qXzFUrAT";
 
