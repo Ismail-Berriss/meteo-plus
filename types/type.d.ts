@@ -8,3 +8,16 @@ declare interface ButtonProps extends TouchableOpacityProps {
   IconRight?: React.ComponentType<any>;
   className?: string;
 }
+
+interface WeatherForecast {
+  day: string;
+  high: number;
+  low: number;
+}
+
+interface WeatherInfo {
+  name: string;
+  country: string;
+  temperature: number;
+  weatherText: string;
+}
