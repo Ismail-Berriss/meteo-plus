@@ -1,8 +1,10 @@
 import { View, Text, Button } from 'react-native';
-import React from 'react';
+import React, { useEffect } from 'react';
 import * as FileSystem from 'expo-file-system';  // Required for accessing local file system
 import axios from 'axios';
 import { Asset } from 'expo-asset'; // Import Asset module
+import {DB} from '@/utils/database';
+import * as SQLite from 'expo-sqlite';
 
 const Transcribe = () => {
   const FLASK_SERVER_URL = "https://1b00-196-119-60-6.ngrok-free.app/transcribe";
@@ -46,6 +48,13 @@ const Transcribe = () => {
       throw error;
     }
   };
+  useEffect(()  => {
+    const dbb= async()=>{
+      const db = await SQLite.openDatabaseAsync('db');
+
+    }
+    dbb();
+  }, []);
 
   return (
     <View>

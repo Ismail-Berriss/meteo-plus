@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   View,
   ImageBackground,
+  ScrollView,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Swiper from "react-native-swiper";
@@ -25,96 +27,136 @@ import { WeatherForecast, WeatherInfo } from "@/types/type";
 const HomeScreen = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [forecast, setForecast] = useState<WeatherForecast[]>([]);
-  const [citiesWeather, setCitiesWeather] = useState<(WeatherInfo | null)[]>(
-    [],
-  );
+  const [forecast, setForecast] = useState<{ [key: string]: WeatherForecast[] }>({});
+  const [citiesWeather, setCitiesWeather] = useState<(WeatherInfo | null)[]>([]);
+  const [cities, setCities] = useState<City[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [refresh, setRefresh] = useState(false);
+
+  const loadCities = async (): Promise<City[]> => {
+    try {
+      const cities: City[] = [];
+      for (let i = 1; i <= 2; i++) {
+        const cityKey = `city_${i}`;
+        const cityData = await AsyncStorage.getItem(cityKey);
+
+        if (cityData) {
+          cities.push(JSON.parse(cityData));
+        }
+      }
+      return cities;
+    } catch (error) {
+      console.error("Error loading cities:", error);
+      return [];
+    }
+  };
+
+  const fetchForecastWeather = async (city: City) => {
+    try {
+      if (!city.key) {
+        console.error(`No city key available for ${city.name}`);
+        return null;
+      }
+
+      const response = await fetch(
+        `http://dataservice.accuweather.com/forecasts/v1/daily/5day/${city.key}?apikey=${ACCUWEATHER_API_KEY}&metric=true`
+      );
+
+      if (!response.ok) {
+        console.error(`Error fetching forecast for city ${city.name}:`, response.statusText);
+        return null;
+      }
+
+      const data = await response.json();
+
+      if (!data || !data.DailyForecasts || !Array.isArray(data.DailyForecasts)) {
+        console.error(`Invalid data received for city ${city.name}:`, data);
+        return null;
+      }
+
+      const forecasts = data.DailyForecasts.map((forecast: any) => ({
+        day: new Date(forecast.Date).toLocaleDateString('en-US', { weekday: 'long' }),
+        high: Math.round(forecast.Temperature.Maximum.Value),
+        low: Math.round(forecast.Temperature.Minimum.Value)
+      }));
+
+      return forecasts;
+
+    } catch (error) {
+      console.error(`Error fetching forecast for city ${city.name}:`, error);
+      return null;
+    }
+  };
+
+  const fetchWeatherForCities = async () => {
+    try {
+      setIsLoading(true);
+      const loadedCities = await loadCities();
+
+      if (loadedCities.length === 0) {
+        setIsLoading(false);
+        return;
+      }
+
+      setCities(loadedCities);
+
+      const weatherPromises = loadedCities.map(async (city) => {
+        try {
+          if (city.key) {
+            return await fetchWeatherByCityKey(city.key, ACCUWEATHER_API_KEY);
+          } else if (city.latitude !== null && city.longitude !== null) {
+            const weatherInfo = await fetchCityWeatherInfo(
+              city.latitude,
+              city.longitude,
+              ACCUWEATHER_API_KEY
+            );
+            return weatherInfo;
+          }
+          return null;
+        } catch (error) {
+          console.error("Error fetching weather for city:", error);
+          return null;
+        }
+      });
+
+      const weatherResults = await Promise.all(loadedCities);
+      setCitiesWeather(weatherResults.filter(Boolean));
+
+      // Fetch forecasts for all cities
+      const forecasts = await Promise.all(
+        loadedCities.map(async (city) => {
+          const forecastData = await fetchForecastWeather(city);
+          return { key: city.key, data: forecastData };
+        })
+      );
+
+      // Convert array of forecasts to object with city keys
+      const forecastObject = forecasts.reduce((acc, curr) => {
+        if (curr.key && curr.data) {
+          acc[curr.key] = curr.data;
+        }
+        return acc;
+      }, {} as { [key: string]: WeatherForecast[] });
+
+      setForecast(forecastObject);
+
+    } catch (error) {
+      console.error("Error fetching cities weather:", error);
+      Alert.alert("Error", "Failed to fetch weather data.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchWeatherForCities = async () => {
-      try {
-        // Get cities from AsyncStorage
-        const citiesString = await AsyncStorage.getItem("cities");
-
-        console.log("cities upon home first call ", citiesString);
-
-        if (!citiesString) {
-          console.log("No cities found in storage");
-          return;
-        }
-
-        const cities: City[] = JSON.parse(citiesString);
-        const firstTwoCities = cities.slice(0, 2);
-        console.log("firstTwoCities", firstTwoCities);
-        // Fetch weather for each city
-        const weatherPromises = firstTwoCities.map(async (city, index) => {
-          try {
-            let weatherInfo: WeatherInfo | null = null;
-
-            if (city.key) {
-              // If city has a city key, fetch weather using it
-              weatherInfo = await fetchWeatherByCityKey(
-                city.key,
-                ACCUWEATHER_API_KEY,
-              );
-
-              console.log("fetch weather info of key in HOME", weatherInfo);
-
-              return weatherInfo;
-            } else if (city.latitude && city.longitude) {
-              // If city has coordinates, fetch weather using them
-              console.log("fetch coord", city);
-
-              weatherInfo = await fetchCityWeatherInfo(
-                city.latitude,
-                city.longitude,
-                ACCUWEATHER_API_KEY,
-              );
-
-              if (weatherInfo && index === 0) {
-                // Update the first city in the array with fetched details
-                setCitiesWeather((prevCities) => {
-                  const updatedCities = [...prevCities];
-                  updatedCities[0] = {
-                    ...updatedCities[0],
-                    name: weatherInfo?.name,
-                    country: weatherInfo?.country,
-                    latitude: city.latitude,
-                    longitude: city.longitude,
-                    weatherText: weatherInfo?.weatherText,
-                    temperature: weatherInfo?.temperature,
-                  };
-                  // Save updated cities to AsyncStorage
-                  AsyncStorage.setItem("cities", JSON.stringify(updatedCities));
-                  return updatedCities;
-                });
-              }
-              return weatherInfo;
-            }
-          } catch (error) {
-            console.error("Error fetching weather for city:", error);
-            return null;
-          }
-        });
-
-        const weatherResults = await Promise.all(weatherPromises);
-
-        setCitiesWeather(weatherResults);
-
-        // Set static forecast data (replace with actual API call if needed)
-        setForecast([
-          { day: "Monday", high: 24, low: 12 },
-          { day: "Tuesday", high: 22, low: 10 },
-          { day: "Wednesday", high: 26, low: 15 },
-        ]);
-      } catch (error) {
-        console.error("Error fetching cities weather:", error);
-        Alert.alert("Error", "Failed to fetch weather data.");
-      }
-    };
-
     fetchWeatherForCities();
   }, []);
+
+  const handleRefresh = async () => {
+    setRefresh(true);
+    await fetchWeatherForCities();
+    setRefresh(false);
+  };
 
   const handleMicrophonePress = () => {
     setModalVisible(true);
@@ -128,9 +170,11 @@ const HomeScreen = () => {
     setIsListening(false);
   };
 
-  const renderWeatherPage = (weatherInfo: WeatherInfo | null) => (
+  const renderWeatherPage = (weatherInfo: City | null) => (
     <View style={styles.weatherContainer}>
-      {weatherInfo ? (
+      {isLoading ? (
+        <ActivityIndicator size="large" color="#fff" />
+      ) : weatherInfo ? (
         <>
           <Text style={styles.cityText}>{weatherInfo.name}</Text>
           <Text style={styles.countryText}>{weatherInfo.country}</Text>
@@ -138,18 +182,20 @@ const HomeScreen = () => {
           <Text style={styles.weatherText}>{weatherInfo.weatherText}</Text>
 
           <View style={styles.forecastContainer}>
-            {forecast.map((item, index) => (
-              <View key={index} style={styles.forecastRow}>
-                <Text style={styles.forecastText}>{item.day}</Text>
-                <Text
-                  style={styles.forecastText}
-                >{`${item.high}°/${item.low}°`}</Text>
-              </View>
-            ))}
+            {weatherInfo.key && forecast[weatherInfo.key] ? (
+              forecast[weatherInfo.key].map((item, index) => (
+                <View key={index} style={styles.forecastRow}>
+                  <Text style={styles.forecastText}>{item.day}</Text>
+                  <Text style={styles.forecastText}>{`${item.high}°/${item.low}°`}</Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.errorText}>No forecast available</Text>
+            )}
           </View>
         </>
       ) : (
-        <ActivityIndicator size="large" color="#fff" />
+        <Text style={styles.errorText}>No weather data available</Text>
       )}
     </View>
   );
@@ -168,19 +214,33 @@ const HomeScreen = () => {
           <Plus size={44} color="white" />
         </TouchableOpacity>
 
-        <Swiper
-          loop={false}
-          showsPagination={true}
-          paginationStyle={styles.pagination}
-          dotStyle={styles.dot}
-          activeDotStyle={styles.activeDot}
+        <ScrollView
+          refreshControl={
+            <RefreshControl refreshing={refresh} onRefresh={handleRefresh} />
+          }
         >
-          {citiesWeather.map((weather, index) => (
-            <View key={index} style={styles.slide}>
-              {renderWeatherPage(weather)}
-            </View>
-          ))}
-        </Swiper>
+          <Swiper
+            loop={false}
+            showsPagination={true}
+            paginationStyle={styles.pagination}
+            dotStyle={styles.dot}
+            activeDotStyle={styles.activeDot}
+          >
+            {citiesWeather.length > 0 ? (
+              citiesWeather.map((weather, index) => (
+                <View key={index} style={styles.slide}>
+                  {renderWeatherPage(weather)}
+                </View>
+              ))
+            ) : (
+              <View style={styles.slide}>
+                <Text style={styles.noDataText}>
+                  No cities added yet...pull down to refresh
+                </Text>
+              </View>
+            )}
+          </Swiper>
+        </ScrollView>
 
         <TouchableOpacity
           style={styles.micButton}
@@ -247,19 +307,26 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: "bold",
     color: "#fff",
+    textAlign: "center",
+    marginBottom: 8,
   },
   countryText: {
     fontSize: 24,
     color: "#fff",
+    textAlign: "center",
+    marginBottom: 16,
   },
   tempText: {
     fontSize: 48,
     fontWeight: "bold",
     color: "#fff",
+    textAlign: "center",
+    marginBottom: 8,
   },
   weatherText: {
     fontSize: 20,
     color: "#fff",
+    textAlign: "center",
     marginVertical: 10,
   },
   plusButton: {
@@ -267,6 +334,7 @@ const styles = StyleSheet.create({
     top: 30,
     right: 20,
     zIndex: 1,
+    padding: 8,
   },
   forecastRow: {
     flexDirection: "row",
@@ -336,18 +404,32 @@ const styles = StyleSheet.create({
   modalDescription: {
     fontSize: 16,
     textAlign: "center",
-    marginBottom: 20,
+    marginVertical: 16,
+    color: "#333",
   },
   closeButton: {
     backgroundColor: "#007AFF",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 5,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
     marginTop: 20,
   },
   closeButtonText: {
     color: "white",
     fontSize: 16,
+    fontWeight: "500",
+  },
+  errorText: {
+    fontSize: 18,
+    color: "#fff",
+    textAlign: "center",
+    marginTop: 20,
+  },
+  noDataText: {
+    fontSize: 20,
+    color: "#fff",
+    textAlign: "center",
+    marginBottom: 20,
   },
 });
 

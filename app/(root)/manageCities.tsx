@@ -16,21 +16,27 @@ import { Plus } from "lucide-react-native";
 import { images } from "@/constants";
 import City from "@/utils/model/city";
 import CustomButton from "@/components/CustomButton";
-
+import { StorageUtils } from "@/utils/storage";
 const ManageCitiesScreen = () => {
   const [cities, setCities] = useState<City[]>([]);
   const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const loadCities = async () => {
-      const storedCities = await AsyncStorage.getItem("cities");
-      console.log(" IAM manage ciyies :storedCities", storedCities);
-      setCities(storedCities ? JSON.parse(storedCities) : []);
-    };
-
     loadCities();
   }, []);
-
+  const loadCities = async () => {
+    try {
+      setIsLoading(true);
+      const storedCities = await StorageUtils.loadCities();
+      console.log('ManageCities - loaded cities:', storedCities);
+      setCities(storedCities);
+    } catch (error) {
+      console.error('Error in loadCities:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
   const handleRemoveCity = async (cityName: string) => {
     const updatedCities = cities.filter((city) => city.name !== cityName);
     setCities(updatedCities);

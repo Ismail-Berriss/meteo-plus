@@ -5,12 +5,11 @@ import {
   FlatList,
   TouchableOpacity,
 } from "react-native";
-import React, { useState, useEffect } from "react";
+import React, { useState, useCallback } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import City from "@/utils/model/city";
 import { ACCUWEATHER_API_KEY } from "@/api";
 
 const AddCityScreen = () => {
@@ -18,12 +17,15 @@ const AddCityScreen = () => {
   const [suggestions, setSuggestions] = useState([]);
   const navigation = useRouter();
 
-  const getAutocompleteSuggestions = async () => {
-    if (query.length < 3) return;
+  const getAutocompleteSuggestions = useCallback(async () => {
+    if (query.length < 3) {
+      setSuggestions([]);
+      return;
+    }
 
     try {
       const response = await fetch(
-        `https://dataservice.accuweather.com/locations/v1/cities/autocomplete?apikey=${ACCUWEATHER_API_KEY}&q=${query}`,
+        `https://dataservice.accuweather.com/locations/v1/cities/autocomplete?apikey=${ACCUWEATHER_API_KEY}&q=${query}`
       );
 
       if (!response.ok) {
@@ -31,39 +33,54 @@ const AddCityScreen = () => {
       }
 
       const data = await response.json();
-      setSuggestions(data.slice(0, 5));
+      setSuggestions(data?.slice(0, 5) || []);
     } catch (error) {
       console.error("Error fetching autocomplete suggestions:", error);
+      setSuggestions([]);
     }
-  };
+  }, [query]);
 
-  const handleSelectCity = async (suggestedCity) => {
+  const handleSelectCity = async (city) => {
+    console.log("Selected city:", city);
     try {
+      // 1. Fetch weather data
       const weatherUrl = `http://dataservice.accuweather.com/currentconditions/v1/${city.Key}?apikey=${ACCUWEATHER_API_KEY}`;
       const response = await fetch(weatherUrl);
+      console.log("Weather response:", response);
+      if (!response.ok) {
+        throw new Error("Failed to fetch weather data");
+      }
+
       const weatherData = await response.json();
       const weather = weatherData[0];
-      console.log(`weather data ${JSON.stringify(weather)}`);
 
-      const selectedCity = new City(
-        suggestedCity.Key,
-        suggestedCity.LocalizedName,
-        suggestedCity.Country.LocalizedName,
-        suggestedCity.GeoPosition?.Latitude || null,
-        suggestedCity.GeoPosition?.Longitude || null,
-        "secondary",
-        weather.Temperature?.Metric?.Value || null,
-        weather.WeatherText || null,
-      );
+      // 2. Create city object
+      const cityData = {
+        key: city.Key,
+        name: city.LocalizedName,
+        country: city.Country.LocalizedName,
+        latitude: city.GeoPosition?.Latitude || null,
+        longitude: city.GeoPosition?.Longitude || null,
+        type: "secondary",
+        temperature: weather.Temperature?.Metric?.Value || null,
+        weatherText: weather.WeatherText || "",
+      };
 
-      const storedCities = await AsyncStorage.getItem("cities");
+      // 3. Retrieve the last used city ID from AsyncStorage
+      const lastId = await AsyncStorage.getItem("lastCityId");
+      const newId = lastId ? parseInt(lastId) + 1 : 1; // Default to 1 if no ID is stored
+          console.log("newId",newId,"lastId",lastId);
+      // 4. Save the new city with an auto-incremented ID in AsyncStorage
+      await AsyncStorage.setItem(`city_${newId}`, JSON.stringify(cityData));
 
-      const cities = storedCities ? JSON.parse(storedCities) : [];
-      cities.push(selectedCity.toObject());
-      await AsyncStorage.setItem("cities", JSON.stringify(cities));
-      console.log(" 5");
+      // 5. Update the last city ID
+      await AsyncStorage.setItem("lastCityId", newId.toString());
+
+      console.log(`City saved with ID: city_${newId}`, cityData);
+
+      navigation.push("/home");
     } catch (error) {
-      console.error("Error saving city:", error);
+      console.error("Error in handleSelectCity:", error);
     }
   };
 
@@ -124,31 +141,11 @@ const AddCityScreen = () => {
                   }}
                   onPress={() => handleSelectCity(item)}
                 >
-                  <Text>{item.LocalizedName}</Text>
+                  <Text>{`${item.LocalizedName}, ${item.Country.LocalizedName}`}</Text>
                 </TouchableOpacity>
               )}
             />
           )}
-          <TouchableOpacity
-            style={{
-              backgroundColor: "#6d28d9",
-              paddingVertical: 10,
-              paddingHorizontal: 15,
-              borderRadius: 5,
-              marginTop: 10,
-            }}
-            onPress={() => navigation.push("/home")}
-          >
-            <Text
-              style={{
-                color: "white",
-                fontWeight: "bold",
-                textAlign: "center",
-              }}
-            >
-              OK
-            </Text>
-          </TouchableOpacity>
         </View>
       </LinearGradient>
     </SafeAreaProvider>

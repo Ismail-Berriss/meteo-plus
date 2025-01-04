@@ -1,4 +1,5 @@
 interface CityWeatherInfo {
+  key:string;
   name: string; // The name of the city
   country: string; // The name of the country
   weatherText: string; // Description of the weather (e.g., "Sunny", "Cloudy")
@@ -37,6 +38,7 @@ const fetchCityWeatherInfo = async (
       const temperature = weatherData[0].Temperature.Metric.Value;
   
       return {
+        key:locationKey,
         name,
         country,
         weatherText,
