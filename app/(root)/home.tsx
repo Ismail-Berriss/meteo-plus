@@ -8,22 +8,51 @@ import {
   TouchableOpacity,
   View,
   ImageBackground,
-  ScrollView,
+  ScrollView,Platform,
   RefreshControl,
 } from "react-native";
+import { getMicrophonePermission } from "@/utils/permissionsUtils";
+import axios from "axios";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Swiper from "react-native-swiper";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Mic, Plus } from "lucide-react-native";
 import { router } from "expo-router";
-
+import { Audio } from "expo-av";
 import { ACCUWEATHER_API_KEY } from "@/api";
 import { images } from "@/constants";
 import fetchCityWeatherInfo from "@/utils/getWeatherByCord";
 import fetchWeatherByCityKey from "@/utils/getWeatherByCityKey";
 import City from "@/utils/model/city";
 import { WeatherForecast, WeatherInfo } from "@/types/type";
-
+import { prompt_assistant } from "@/utils/prompt";
+interface RecordingOptions {
+  android: {
+    extension: string;
+    outPutFormat: number;
+    androidEncoder: number;
+    sampleRate: number;
+    numberOfChannels: number;
+    bitRate: number;
+  };
+  ios: {
+    extension: string;
+    audioQuality: number;
+    sampleRate: number;
+    numberOfChannels: number;
+    bitRate: number;
+    linearPCMBitDepth: number;
+    linearPCMIsBigEndian: boolean;
+    linearPCMIsFloat: boolean;
+  };
+}
+interface GeminiResponse {
+  candidates: {
+    content: {
+      parts: { text: string }[];
+    };
+  }[];
+}
 const HomeScreen = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -32,6 +61,13 @@ const HomeScreen = () => {
   const [cities, setCities] = useState<City[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refresh, setRefresh] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [transcript, setTranscript] = useState<string>("");
+  const [assistext, setAssistext] = useState<string>("");
+  const [assisreply, setAssisreply] = useState(false);
+  const [assisloading, setAssisloading] = useState(false);
+
+  const [recording, setRecording] = useState<Audio.Recording>();
 
   const loadCities = async (): Promise<City[]> => {
     try {
@@ -104,12 +140,17 @@ const HomeScreen = () => {
         try {
           if (city.key) {
             return await fetchWeatherByCityKey(city.key, ACCUWEATHER_API_KEY);
-          } else if (city.latitude !== null && city.longitude !== null) {
+          } 
+          else if (city.latitude !== null && city.longitude !== null) {
             const weatherInfo = await fetchCityWeatherInfo(
               city.latitude,
               city.longitude,
               ACCUWEATHER_API_KEY
             );
+            if(weatherInfo==null){
+              Alert("failed to load city from GPS,Please chose city manually");
+              router.push("/(root)/add-city");
+            }
             return weatherInfo;
           }
           return null;
@@ -157,6 +198,136 @@ const HomeScreen = () => {
     await fetchWeatherForCities();
     setRefresh(false);
   };
+/// this is voice assistant logic
+const recordingOptions: RecordingOptions = {
+  android: {
+    extension: ".mp3",
+    outPutFormat: Audio.AndroidOutputFormat.MPEG_4,
+    androidEncoder: Audio.AndroidAudioEncoder.AAC,
+    sampleRate: 48000, // Higher sample rate for better audio quality
+    numberOfChannels: 2, // Stereo recording
+    bitRate: 192000, 
+  },
+  ios: {
+    extension: ".mp3",
+    audioQuality: Audio.IOSAudioQuality.HIGH,
+    sampleRate: 44100,
+    numberOfChannels: 2,
+    bitRate: 128000,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+};
+///--------------- start recording func--------------
+const startRecording = async () => {
+  try {
+    const hasPermission = await getMicrophonePermission();
+    if (!hasPermission) {
+      Alert.alert("Permission Required", "Microphone permission is required to record audio.");
+      return;
+    }
+
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: true,
+      playsInSilentModeIOS: true,
+    });
+
+   // const newRecording = new Audio.Recording();
+    //await newRecording.prepareToRecordAsync(recordingOptions);
+    //await newRecording.startAsync();
+    const { recording } = await Audio.Recording.createAsync(recordingOptions);
+    setIsRecording(true);
+    setRecording(recording);
+    //setRecording(newRecording);
+   // setIsRecording(true);
+    
+    console.log("Recording started successfully");
+  } catch (error) {
+    console.error("Failed to start recording:", error);
+    Alert.alert("Error", "Failed to start recording. Please try again.");
+  }
+};
+///------------------------------------
+ const stopRecording = async () => {
+    try {
+      if (!recording || !isRecording) {
+        console.log("No active recording to stop");
+        return;
+      }
+
+      setIsRecording(false);
+      console.log("Stopping recording...");
+
+      await recording.stopAndUnloadAsync();
+
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+
+      const uri = recording.getURI();
+      //setRecording(null);
+
+      if (!uri) {
+        throw new Error("Recording URI is undefined");
+      }
+
+      await uploadRecording(uri);
+    } catch (error) {
+      console.error("Error stopping recording:", error);
+      Alert.alert("Error", "Failed to process recording. Please try again.");
+    }
+  };
+  //-------------------------------
+
+  const uploadRecording = async (uri: string) => {
+    try {
+      console.log("Starting audio upload with URI:", uri);
+
+      // Save recording to assets folder
+      //const assetUri = await saveRecordingToAssets(uri);
+      
+      // Load the saved recording as an asset
+      //const asset = await loadAssetForUpload(assetUri);
+      
+      const formData = new FormData();
+      formData.append("file", {
+        uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
+        type: "audio/mp3",
+        name: "recording.mp3"
+      } as any);
+         
+      const response = await axios.post(
+        "https://6774-196-119-60-6.ngrok-free.app/transcribe", 
+        formData, 
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            "Accept": "application/json",
+          },
+        }
+      );
+      
+      console.log("Transcription:", response.data);
+      const transcript = response.data.transcriptions[0]?.transcript;
+     const ass_text= sendToGemini(prompt_assistant,transcript);
+
+      console.log("Transcription:", transcript);
+      console.log("this is assisant reply",assistext);
+
+        //setTranscript(data.transcript);
+      return response.data.transcriptions[0]?.transcript;
+    } catch (error) {
+      console.error("Error uploading recording:", error);
+      Alert.alert("Error", "Failed to upload recording. Please try again.");
+    }
+  };
+//-------------------------------
+const handleModalClose = () => {
+  if (isRecording) {
+    stopRecording();
+  }
+  setModalVisible(false);
+};
+
 
   const handleMicrophonePress = () => {
     setModalVisible(true);
@@ -165,11 +336,7 @@ const HomeScreen = () => {
     }, 1500);
   };
 
-  const handleModalClose = () => {
-    setModalVisible(false);
-    setIsListening(false);
-  };
-
+  
   const renderWeatherPage = (weatherInfo: City | null) => (
     <View style={styles.weatherContainer}>
       {isLoading ? (
@@ -199,8 +366,61 @@ const HomeScreen = () => {
       )}
     </View>
   );
+const getClothsFromApi =async(prompt_user:string)=>{
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_API_KEY = "AIzaSyCcWWbB0FzPrZqeehhZPfzITbBLWYXcycY"; 
+const final_promot=prompt_assistant+prompt_user;
+const formdata= new FormData();
+formdata.append("",final_promot);
+  const assistant_text_response=await axios.post(GEMINI_API_URL,
+    
+  )
 
-  return (
+} 
+/// we could send the primary city with the prompt
+async function sendToGemini(prompt: string, userText: string): Promise<string> {
+  const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent';
+  const GEMINI_API_KEY = 'AIzaSyCcWWbB0FzPrZqeehhZPfzITbBLWYXcycY'; // Replace with your actual API key.
+
+  const requestPayload = {
+    contents: [
+      {
+        parts: [
+          { text: `${prompt} ${userText}` },
+        ],
+      },
+    ],
+  };
+
+  try {
+    const response = await axios.post<GeminiResponse>(
+      `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
+      requestPayload,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    setAssisloading(true);
+    if (response.data.candidates?.[0]?.content?.parts?.[0]?.text) {
+      setAssisreply(true);
+      setAssisloading(false);
+     // console.log("inside gem",response.data.candidates?.[0]?.content.parts[0].text);
+     setAssistext(response.data.candidates?.[0]?.content.parts[0].text);
+      return response.data.candidates?.[0]?.content.parts[0].text;
+    } else {
+      throw new Error('No content generated by Gemini API');
+    }
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response) {
+      console.error('Gemini API Error:', error.response.data);
+      throw new Error(`Gemini API Error: ${error.response.statusText}`);
+    }
+    throw new Error(`Request failed: ${error.message}`);
+  }
+}
+ return (
     <SafeAreaProvider>
       <ImageBackground
         source={images.morning}
@@ -242,45 +462,65 @@ const HomeScreen = () => {
           </Swiper>
         </ScrollView>
 
-        <TouchableOpacity
-          style={styles.micButton}
-          onPress={handleMicrophonePress}
-        >
-          <Mic size={28} color="white" />
-        </TouchableOpacity>
+      <TouchableOpacity
+               style={styles.micButton}
+               onPress={() => setModalVisible(true)}
+             >
+               <Mic size={28} color="white" />
+             </TouchableOpacity>
+             <Modal
+  animationType="slide"
+  transparent
+  visible={modalVisible}
+  onRequestClose={handleModalClose}
+>
+  <View style={styles.modalOverlay}>
+    <View style={styles.modalContent}>
+      <Mic size={48} color="#007AFF" />
+      {isRecording ? (
+        <Text style={styles.listeningText}>I'm listening...</Text>
+      ) : (
+        <Text style={styles.modalDescription}>
+          Tap the button and start talking!
+        </Text>
+      )}
 
-        <Modal
-          animationType="slide"
-          transparent
-          visible={modalVisible}
-          onRequestClose={handleModalClose}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Mic size={48} color="#007AFF" />
-              {isListening ? (
-                <Text style={styles.listeningText}>I'm listening...</Text>
-              ) : (
-                <Text style={styles.modalDescription}>
-                  Tap the mic and start talking!
-                </Text>
-              )}
-              {isListening && (
-                <ActivityIndicator
-                  size="large"
-                  color="#007AFF"
-                  style={{ marginTop: 20 }}
-                />
-              )}
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={handleModalClose}
-              >
-                <Text style={styles.closeButtonText}>Close</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
+      {isRecording && (
+        <ActivityIndicator
+          size="large"
+          color="#007AFF"
+          style={{ marginTop: 20 }}
+        />
+      )}
+
+      {assisloading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.loadingText}>Waiting for assistant's response...</Text>
+        </View>
+      ) : assisreply ? (
+        <Text style={styles.transcriptText}>Assistant: {assistext}</Text>
+      ) : null}
+
+      <TouchableOpacity
+        style={styles.recordButton}
+        onPress={isRecording ? stopRecording : startRecording}
+      >
+        <Text style={styles.recordButtonText}>
+          {isRecording ? "Stop Recording" : "Start Recording"}
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.closeButton}
+        onPress={handleModalClose}
+      >
+        <Text style={styles.closeButtonText}>Close</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+</Modal>
+
       </ImageBackground>
     </SafeAreaProvider>
   );
@@ -294,9 +534,25 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
   },
+  loadingContainer: {
+    alignItems: "center",
+    marginTop: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#007AFF",
+    marginTop: 10,
+    textAlign: "center",
+  },
   weatherContainer: {
     alignItems: "center",
     paddingVertical: 36,
+  },
+  transcriptText: {
+    fontSize: 16,
+    textAlign: "center",
+    marginVertical: 10,
+    color: "#333",
   },
   forecastContainer: {
     width: "100%",
@@ -315,6 +571,17 @@ const styles = StyleSheet.create({
     color: "#fff",
     textAlign: "center",
     marginBottom: 16,
+  },
+  recordButtonText: {
+    color: "white",
+    fontSize: 16,
+  },
+  recordButton: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+    marginTop: 20,
   },
   tempText: {
     fontSize: 48,

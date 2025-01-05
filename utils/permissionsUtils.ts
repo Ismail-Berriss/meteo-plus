@@ -38,6 +38,23 @@ const checkLocationServices = async () => {
   return true;
 };
 
+const getMicrophonePermission = async () => {
+  try {
+    const { granted } = await Audio.requestPermissionsAsync();
+
+    if (!granted) {
+      Alert.alert(
+        "Permission",
+        "Please grant permission to access microphone"
+      );
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.log(error);
+    return false;
+  }
+};
 
 const requestLocationPermission = async () => {
   try {
@@ -71,4 +88,4 @@ const requestLocationPermission = async () => {
   }
 };
 
-export { requestLocationPermission, checkLocationServices };
+export { requestLocationPermission, checkLocationServices,getMicrophonePermission  };
