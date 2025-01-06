@@ -13,7 +13,11 @@ interface CityWeatherInfo {
 
 const saveLocationToAsyncStorage = async (location: UserLocation) => {
   try {
-    const city:CityWeatherInfo=await fetchCityWeatherInfo(location.getLatitude(),location.getLongitude(),ACCUWEATHER_API_KEY);
+    const city: CityWeatherInfo = await fetchCityWeatherInfo(
+      location.getLatitude(),
+      location.getLongitude(),
+      ACCUWEATHER_API_KEY,
+    );
     console.log("City weather info:", city);
     const selectedCity = new City(
       city?.key || "", // Handle missing key
@@ -24,9 +28,8 @@ const saveLocationToAsyncStorage = async (location: UserLocation) => {
       "primary",
       city?.temperature || 0,
 
-      city?.weatherText || ""
+      city?.weatherText || "",
     );
-    
 
     console.log("City object created:", selectedCity);
 

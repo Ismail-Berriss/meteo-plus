@@ -27,11 +27,81 @@ import { WeatherForecast, WeatherInfo } from "@/types/type";
 const HomeScreen = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [forecast, setForecast] = useState<{ [key: string]: WeatherForecast[] }>({});
-  const [citiesWeather, setCitiesWeather] = useState<(WeatherInfo | null)[]>([]);
+  const [forecast, setForecast] = useState<{
+    [key: string]: WeatherForecast[];
+  }>({});
+  const [citiesWeather, setCitiesWeather] = useState<(WeatherInfo | null)[]>(
+    [],
+  );
   const [cities, setCities] = useState<City[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refresh, setRefresh] = useState(false);
+
+  useEffect(() => {
+    fetchWeatherForCities();
+  }, []);
+
+  const fetchWeatherForCities = async () => {
+    try {
+      setIsLoading(true);
+      const loadedCities = await loadCities();
+
+      if (loadedCities.length === 0) {
+        setIsLoading(false);
+        return;
+      }
+
+      setCities(loadedCities);
+
+      loadedCities.map(async (city) => {
+        try {
+          if (city.key) {
+            return await fetchWeatherByCityKey(city.key, ACCUWEATHER_API_KEY);
+          } else if (city.latitude !== null && city.longitude !== null) {
+            const weatherInfo = await fetchCityWeatherInfo(
+              city.latitude,
+              city.longitude,
+              ACCUWEATHER_API_KEY,
+            );
+            return weatherInfo;
+          }
+          return null;
+        } catch (error) {
+          console.error("Error fetching weather for city:", error);
+          return null;
+        }
+      });
+
+      const weatherResults = await Promise.all(loadedCities);
+      setCitiesWeather(weatherResults.filter(Boolean));
+
+      // Fetch forecasts for all cities
+      const forecasts = await Promise.all(
+        loadedCities.map(async (city) => {
+          const forecastData = await fetchForecastWeather(city);
+          return { key: city.key, data: forecastData };
+        }),
+      );
+
+      // Convert array of forecasts to object with city keys
+      const forecastObject = forecasts.reduce(
+        (acc, curr) => {
+          if (curr.key && curr.data) {
+            acc[curr.key] = curr.data;
+          }
+          return acc;
+        },
+        {} as { [key: string]: WeatherForecast[] },
+      );
+
+      setForecast(forecastObject);
+    } catch (error) {
+      console.error("Error fetching cities weather:", error);
+      Alert.alert("Error", "Failed to fetch weather data.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const loadCities = async (): Promise<City[]> => {
     try {
@@ -59,98 +129,42 @@ const HomeScreen = () => {
       }
 
       const response = await fetch(
-        `http://dataservice.accuweather.com/forecasts/v1/daily/5day/${city.key}?apikey=${ACCUWEATHER_API_KEY}&metric=true`
+        `http://dataservice.accuweather.com/forecasts/v1/daily/5day/${city.key}?apikey=${ACCUWEATHER_API_KEY}&metric=true`,
       );
 
       if (!response.ok) {
-        console.error(`Error fetching forecast for city ${city.name}:`, response.statusText);
+        console.error(
+          `Error fetching forecast for city ${city.name}:`,
+          response.statusText,
+        );
         return null;
       }
 
       const data = await response.json();
 
-      if (!data || !data.DailyForecasts || !Array.isArray(data.DailyForecasts)) {
+      if (
+        !data ||
+        !data.DailyForecasts ||
+        !Array.isArray(data.DailyForecasts)
+      ) {
         console.error(`Invalid data received for city ${city.name}:`, data);
         return null;
       }
 
       const forecasts = data.DailyForecasts.map((forecast: any) => ({
-        day: new Date(forecast.Date).toLocaleDateString('en-US', { weekday: 'long' }),
+        day: new Date(forecast.Date).toLocaleDateString("en-US", {
+          weekday: "long",
+        }),
         high: Math.round(forecast.Temperature.Maximum.Value),
-        low: Math.round(forecast.Temperature.Minimum.Value)
+        low: Math.round(forecast.Temperature.Minimum.Value),
       }));
 
       return forecasts;
-
     } catch (error) {
       console.error(`Error fetching forecast for city ${city.name}:`, error);
       return null;
     }
   };
-
-  const fetchWeatherForCities = async () => {
-    try {
-      setIsLoading(true);
-      const loadedCities = await loadCities();
-
-      if (loadedCities.length === 0) {
-        setIsLoading(false);
-        return;
-      }
-
-      setCities(loadedCities);
-
-      const weatherPromises = loadedCities.map(async (city) => {
-        try {
-          if (city.key) {
-            return await fetchWeatherByCityKey(city.key, ACCUWEATHER_API_KEY);
-          } else if (city.latitude !== null && city.longitude !== null) {
-            const weatherInfo = await fetchCityWeatherInfo(
-              city.latitude,
-              city.longitude,
-              ACCUWEATHER_API_KEY
-            );
-            return weatherInfo;
-          }
-          return null;
-        } catch (error) {
-          console.error("Error fetching weather for city:", error);
-          return null;
-        }
-      });
-
-      const weatherResults = await Promise.all(loadedCities);
-      setCitiesWeather(weatherResults.filter(Boolean));
-
-      // Fetch forecasts for all cities
-      const forecasts = await Promise.all(
-        loadedCities.map(async (city) => {
-          const forecastData = await fetchForecastWeather(city);
-          return { key: city.key, data: forecastData };
-        })
-      );
-
-      // Convert array of forecasts to object with city keys
-      const forecastObject = forecasts.reduce((acc, curr) => {
-        if (curr.key && curr.data) {
-          acc[curr.key] = curr.data;
-        }
-        return acc;
-      }, {} as { [key: string]: WeatherForecast[] });
-
-      setForecast(forecastObject);
-
-    } catch (error) {
-      console.error("Error fetching cities weather:", error);
-      Alert.alert("Error", "Failed to fetch weather data.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchWeatherForCities();
-  }, []);
 
   const handleRefresh = async () => {
     setRefresh(true);
@@ -178,7 +192,9 @@ const HomeScreen = () => {
         <>
           <Text style={styles.cityText}>{weatherInfo.name}</Text>
           <Text style={styles.countryText}>{weatherInfo.country}</Text>
-          <Text style={styles.tempText}>{`${weatherInfo.temperature}°C`}</Text>
+          <Text
+            style={styles.tempText}
+          >{`${Math.trunc(weatherInfo.temperature!)}°C`}</Text>
           <Text style={styles.weatherText}>{weatherInfo.weatherText}</Text>
 
           <View style={styles.forecastContainer}>
@@ -186,7 +202,9 @@ const HomeScreen = () => {
               forecast[weatherInfo.key].map((item, index) => (
                 <View key={index} style={styles.forecastRow}>
                   <Text style={styles.forecastText}>{item.day}</Text>
-                  <Text style={styles.forecastText}>{`${item.high}°/${item.low}°`}</Text>
+                  <Text
+                    style={styles.forecastText}
+                  >{`${item.high}°/${item.low}°`}</Text>
                 </View>
               ))
             ) : (
