@@ -58,8 +58,12 @@ interface GeminiResponse {
 const HomeScreen = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [forecast, setForecast] = useState<{ [key: string]: WeatherForecast[] }>({});
-  const [citiesWeather, setCitiesWeather] = useState<(WeatherInfo | null)[]>([]);
+  const [forecast, setForecast] = useState<{
+    [key: string]: WeatherForecast[];
+  }>({});
+  const [citiesWeather, setCitiesWeather] = useState<(WeatherInfo | null)[]>(
+    [],
+  );
   const [cities, setCities] = useState<City[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refresh, setRefresh] = useState(false);
@@ -98,29 +102,37 @@ const HomeScreen = () => {
       }
 
       const response = await fetch(
-        `http://dataservice.accuweather.com/forecasts/v1/daily/5day/${city.key}?apikey=${ACCUWEATHER_API_KEY}&metric=true`
+        `http://dataservice.accuweather.com/forecasts/v1/daily/5day/${city.key}?apikey=${ACCUWEATHER_API_KEY}&metric=true`,
       );
 
       if (!response.ok) {
-        console.error(`Error fetching forecast for city ${city.name}:`, response.statusText);
+        console.error(
+          `Error fetching forecast for city ${city.name}:`,
+          response.statusText,
+        );
         return null;
       }
 
       const data = await response.json();
 
-      if (!data || !data.DailyForecasts || !Array.isArray(data.DailyForecasts)) {
+      if (
+        !data ||
+        !data.DailyForecasts ||
+        !Array.isArray(data.DailyForecasts)
+      ) {
         console.error(`Invalid data received for city ${city.name}:`, data);
         return null;
       }
 
       const forecasts = data.DailyForecasts.map((forecast: any) => ({
-        day: new Date(forecast.Date).toLocaleDateString('en-US', { weekday: 'long' }),
+        day: new Date(forecast.Date).toLocaleDateString("en-US", {
+          weekday: "long",
+        }),
         high: Math.round(forecast.Temperature.Maximum.Value),
-        low: Math.round(forecast.Temperature.Minimum.Value)
+        low: Math.round(forecast.Temperature.Minimum.Value),
       }));
 
       return forecasts;
-
     } catch (error) {
       console.error(`Error fetching forecast for city ${city.name}:`, error);
       return null;
@@ -143,17 +155,12 @@ const HomeScreen = () => {
         try {
           if (city.key) {
             return await fetchWeatherByCityKey(city.key, ACCUWEATHER_API_KEY);
-          } 
-          else if (city.latitude !== null && city.longitude !== null) {
+          } else if (city.latitude !== null && city.longitude !== null) {
             const weatherInfo = await fetchCityWeatherInfo(
               city.latitude,
               city.longitude,
               ACCUWEATHER_API_KEY
             );
-            if(weatherInfo==null){
-              Alert("failed to load city from GPS,Please chose city manually");
-              router.push("/(root)/add-city");
-            }
             return weatherInfo;
           }
           return null;
@@ -398,7 +405,9 @@ const handleModalClose = () => {
         <>
           <Text style={styles.cityText}>{weatherInfo.name}</Text>
           <Text style={styles.countryText}>{weatherInfo.country}</Text>
-          <Text style={styles.tempText}>{`${weatherInfo.temperature}°C`}</Text>
+          <Text
+            style={styles.tempText}
+          >{`${Math.trunc(weatherInfo.temperature!)}°C`}</Text>
           <Text style={styles.weatherText}>{weatherInfo.weatherText}</Text>
 
           <View style={styles.forecastContainer}>
@@ -406,7 +415,9 @@ const handleModalClose = () => {
               forecast[weatherInfo.key].map((item, index) => (
                 <View key={index} style={styles.forecastRow}>
                   <Text style={styles.forecastText}>{item.day}</Text>
-                  <Text style={styles.forecastText}>{`${item.high}°/${item.low}°`}</Text>
+                  <Text
+                    style={styles.forecastText}
+                  >{`${item.high}°/${item.low}°`}</Text>
                 </View>
               ))
             ) : (
