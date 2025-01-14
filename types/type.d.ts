@@ -20,4 +20,8 @@ interface WeatherInfo {
   country: string;
   temperature: number;
   weatherText: string;
+  windSpeed: number;
+  humidity:number;
+  realFeel: number;
+  uvIndex:number;
 }

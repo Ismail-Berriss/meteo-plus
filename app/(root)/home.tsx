@@ -79,7 +79,7 @@ const HomeScreen = () => {
   const loadCities = async (): Promise<City[]> => {
     try {
       const cities: City[] = [];
-      for (let i = 1; i <= 2; i++) {
+      for (let i = 1; i <= 10; i++) {
         const cityKey = `city_${i}`;
         const cityData = await AsyncStorage.getItem(cityKey);
 
@@ -138,6 +138,26 @@ const HomeScreen = () => {
       return null;
     }
   };
+  const fetchCurrentConditions = async (cityKey: string) => {
+    try {
+      const response = await axios.get(
+        `http://dataservice.accuweather.com/currentconditions/v1/${cityKey}?apikey=${ACCUWEATHER_API_KEY}&details=true`
+      );
+      if (response.data && response.data.length > 0) {
+        const condition = response.data[0];
+        return {
+          windSpeed: condition.Wind.Speed.Metric.Value,
+          humidity: condition.RelativeHumidity,
+          realFeel: condition.RealFeelTemperature.Metric.Value,
+          uvIndex: condition.UVIndex,
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error(`Error fetching current conditions for city ${cityKey}:`, error);
+      return null;
+    }
+  };
 
   const fetchWeatherForCities = async () => {
     try {
@@ -150,11 +170,22 @@ const HomeScreen = () => {
       }
 
       setCities(loadedCities);
-
       const weatherPromises = loadedCities.map(async (city) => {
         try {
           if (city.key) {
-            return await fetchWeatherByCityKey(city.key, ACCUWEATHER_API_KEY);
+            // Fetch both current conditions and forecast concurrently
+            const [currentConditions, forecastData] = await Promise.all([
+              fetchCurrentConditions(city.key),
+              fetchWeatherByCityKey(city.key, ACCUWEATHER_API_KEY),
+            ]);
+            // Merge the forecast and current condition data
+            return {
+              ...forecastData,
+              ...currentConditions,
+              key: city.key,
+              name: city.name,
+              country: city.country,
+            };
           } else if (city.latitude !== null && city.longitude !== null) {
             const weatherInfo = await fetchCityWeatherInfo(
               city.latitude,
@@ -169,8 +200,9 @@ const HomeScreen = () => {
           return null;
         }
       });
-
-      const weatherResults = await Promise.all(loadedCities);
+      
+          console.log(weatherPromises);
+      const weatherResults = await Promise.all(weatherPromises);
       setCitiesWeather(weatherResults.filter(Boolean));
 
       // Fetch forecasts for all cities
@@ -288,98 +320,78 @@ const startRecording = async () => {
   };
   //-------------------------------
 
-  const uploadRecording = async (uri: string) => {
-    try {
-      setAssisVoiceloading("....getting there");
-      console.log("Starting audio upload with URI:", uri);
+const uploadRecording = async (uri: string) => {
+  try {
+    setAssisVoiceloading("....getting there");
+    console.log("Starting audio upload with URI:", uri);
 
-      // Save recording to assets folder
-      //const assetUri = await saveRecordingToAssets(uri);
-      
-      // Load the saved recording as an asset
-      //const asset = await loadAssetForUpload(assetUri);
-      
-      const formData = new FormData();
-      formData.append("file", {
-        uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
-        type: "audio/mp3",
-        name: "recording.mp3"
-      } as any);
-         
-      const response = await axios.post(
-        "https://055e-196-119-60-6.ngrok-free.app/transcribe", 
-        formData, 
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-            "Accept": "application/json",
-          },
-        }
-      );
+    const formData = new FormData();
+    formData.append("file", {
+      uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
+      type: "audio/mp3",
+      name: "recording.mp3"
+    } as any);
 
-      console.log("Transcription:", response.data);
-      const transcript = response.data.transcriptions[0]?.transcript;
-     const ass_text= sendToGemini(prompt_assistant,transcript);
+    const transcriptionResponse = await axios.post(
+      "https://7e58-196-119-60-6.ngrok-free.app/transcribe",
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+          "Accept": "application/json",
+        },
+      }
+    );
 
-      console.log("Transcription:", transcript);
-      console.log("this is assisant reply",assistext);
-// this is text to speech code 
-try{
-  const response_audio = await axios.post(
-    "https://api.play.ht/api/v2/tts/stream",
-    {
-      text: assisVoiceloading,
-      voice_engine: "PlayDialog",
-      voice: "s3://voice-cloning-zero-shot/d9ff78ba-d016-47f6-b0ef-dd630f59414e/female-cs/manifest.json",
-      output_format: "mp3",
-    },
-    {
-      headers: {
-        "X-USER-ID": "c4tWRiKDPdXnmkX8A4tBaMukT7k1",
-        AUTHORIZATION: "6b91dd8a331249ff9623014eb8533293",
-        accept: "audio/mpeg",
-        "content-type": "application/json",
+    const transcript = transcriptionResponse.data.transcriptions[0]?.transcript;
+    console.log("Transcription:", transcript);
+
+    const assistantResponseText = await sendToGemini(prompt_assistant, transcript);
+
+    // Update assistant reply state
+    setAssistext(assistantResponseText);
+    setAssisreply(true);
+
+    // Initiate text-to-speech conversion and playback
+    await playAssistantResponse(assistantResponseText);
+
+  } catch (error) {
+    console.error("Error uploading recording:", error);
+    Alert.alert("Error", "Failed to upload recording. Please try again.");
+  } finally {
+    setAssisloading(false);
+  }
+};
+const playAssistantResponse = async (text: string) => {
+  try {
+    const responseAudio = await axios.post(
+      "https://api.play.ht/api/v2/tts/stream",
+      {
+        text,
+        voice_engine: "PlayDialog",
+        voice: "s3://voice-cloning-zero-shot/d9ff78ba-d016-47f6-b0ef-dd630f59414e/female-cs/manifest.json",
+        output_format: "mp3",
       },
-      responseType: "arraybuffer", // Ensures response is binary data
-    }
-  ); 
-  console.log("audio of assis",);
+      {
+        headers: {
+          "X-USER-ID": "c4tWRiKDPdXnmkX8A4tBaMukT7k1",
+          AUTHORIZATION: "6b91dd8a331249ff9623014eb8533293",
+          accept: "audio/mpeg",
+          "content-type": "application/json",
+        },
+        responseType: "arraybuffer",
+      }
+    );
 
-  const base64Audio = `data:audio/mp3;base64,${Buffer.from(response_audio.data).toString('base64')}`;
+    const base64Audio = `data:audio/mp3;base64,${Buffer.from(responseAudio.data).toString('base64')}`;
+    const soundObject = new Audio.Sound();
+    await soundObject.loadAsync({ uri: base64Audio });
+    await soundObject.playAsync();
 
-
-  // Load and play the audio using expo-av
-  const soundObject = new Audio.Sound();
-  await soundObject.loadAsync({ uri: base64Audio });
-  setAssisloading(false);
-
-  await soundObject.playAsync();
-  // working but slow due to file saving --------------------------------
-  // const audioFilePath = `${FileSystem.cacheDirectory}assistant-reply.mp3`;
-  //   await FileSystem.writeAsStringAsync(
-  //     audioFilePath,
-  //     Buffer.from(response_audio.data).toString('base64'),
-  //     { encoding: FileSystem.EncodingType.Base64 }
-  //   );
-
-  //   console.log("Audio file saved to:", audioFilePath);
-
-  //   // Load and play the audio using expo-av
-  //   const soundObject = new Audio.Sound();
-  //   await soundObject.loadAsync({ uri: audioFilePath });
-  //   await soundObject.playAsync();
-
-  // ----------------------------------------------------------------//
-}catch(error){
-  console.log("reading assis text failed",error);
-}
-        //setTranscript(data.transcript);
-      return response.data.transcriptions[0]?.transcript;
-    } catch (error) {
-      console.error("Error uploading recording:", error);
-      Alert.alert("Error", "Failed to upload recording. Please try again.");
-    }
-  };
+  } catch (error) {
+    console.error("Error during audio playback:", error);
+  }
+};
 //-------------------------------
 const handleModalClose = () => {
   if (isRecording) {
@@ -397,39 +409,64 @@ const handleModalClose = () => {
   };
 
   
-  const renderWeatherPage = (weatherInfo: City | null) => (
+  const renderWeatherPage = (weatherInfo: WeatherInfo | null) => (
     <View style={styles.weatherContainer}>
       {isLoading ? (
         <ActivityIndicator size="large" color="#fff" />
       ) : weatherInfo ? (
-        <>
-          <Text style={styles.cityText}>{weatherInfo.name}</Text>
-          <Text style={styles.countryText}>{weatherInfo.country}</Text>
-          <Text
-            style={styles.tempText}
-          >{`${Math.trunc(weatherInfo.temperature!)}°C`}</Text>
-          <Text style={styles.weatherText}>{weatherInfo.weatherText}</Text>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <View style={styles.weatherContent}>
+            {/* Main Weather Information */}
+            <Text style={styles.cityText}>{weatherInfo.name}</Text>
+            <Text style={styles.countryText}>{weatherInfo.country}</Text>
+            <Text style={styles.tempText}>{`${Math.trunc(weatherInfo.temperature!)}°C`}</Text>
+            <Text style={styles.weatherText}>{weatherInfo.weatherText}</Text>
 
-          <View style={styles.forecastContainer}>
-            {weatherInfo.key && forecast[weatherInfo.key] ? (
-              forecast[weatherInfo.key].map((item, index) => (
-                <View key={index} style={styles.forecastRow}>
-                  <Text style={styles.forecastText}>{item.day}</Text>
-                  <Text
-                    style={styles.forecastText}
-                  >{`${item.high}°/${item.low}°`}</Text>
+            {/* Current Conditions Card */}
+            <View style={styles.currentConditionsCard}>
+              <Text style={styles.sectionTitle}>Current Conditions</Text>
+              <View style={styles.conditionsGrid}>
+                <View style={styles.conditionItem}>
+                  <Text style={styles.conditionLabel}>Wind Speed</Text>
+                  <Text style={styles.conditionValue}>{weatherInfo.windSpeed} km/h</Text>
                 </View>
-              ))
-            ) : (
-              <Text style={styles.errorText}>No forecast available</Text>
-            )}
+                <View style={styles.conditionItem}>
+                  <Text style={styles.conditionLabel}>Humidity</Text>
+                  <Text style={styles.conditionValue}>{weatherInfo.humidity}%</Text>
+                </View>
+                <View style={styles.conditionItem}>
+                  <Text style={styles.conditionLabel}>Real Feel</Text>
+                  <Text style={styles.conditionValue}>{weatherInfo.realFeel}°C</Text>
+                </View>
+                <View style={styles.conditionItem}>
+                  <Text style={styles.conditionLabel}>UV Index</Text>
+                  <Text style={styles.conditionValue}>{weatherInfo.uvIndex}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* 5-Day Forecast */}
+            <View style={styles.forecastCard}>
+              <Text style={styles.sectionTitle}>5-Day Forecast</Text>
+              {weatherInfo.key && forecast[weatherInfo.key] ? (
+                forecast[weatherInfo.key].map((item, index) => (
+                  <View key={index} style={styles.forecastRow}>
+                    <Text style={styles.forecastDay}>{item.day}</Text>
+                    <Text style={styles.forecastTemp}>{`${item.high}°/${item.low}°`}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.errorText}>No forecast available</Text>
+              )}
+            </View>
           </View>
-        </>
+        </ScrollView>
       ) : (
         <Text style={styles.errorText}>No weather data available</Text>
       )}
     </View>
   );
+  
 const getClothsFromApi =async(prompt_user:string)=>{
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
 const GEMINI_API_KEY = "AIzaSyCcWWbB0FzPrZqeehhZPfzITbBLWYXcycY"; 
@@ -484,59 +521,59 @@ async function sendToGemini(prompt: string, userText: string): Promise<string> {
   }
 }
  return (
-    <SafeAreaProvider>
-      <ImageBackground
-        source={images.morning}
-        style={styles.container}
-        resizeMode="cover"
+  <SafeAreaProvider>
+  <ImageBackground
+    source={images.morning}
+    style={styles.container}
+    resizeMode="cover"
+  >
+    <TouchableOpacity
+      style={styles.plusButton}
+      onPress={() => router.push("/(root)/manageCities")}
+    >
+      <Plus size={44} color="white" />
+    </TouchableOpacity>
+
+    <ScrollView
+      refreshControl={
+        <RefreshControl refreshing={refresh} onRefresh={handleRefresh} />
+      }
+    >
+      <Swiper
+        loop={false}
+        showsPagination={true}
+        paginationStyle={styles.pagination}
+        dotStyle={styles.dot}
+        activeDotStyle={styles.activeDot}
       >
-        <TouchableOpacity
-          style={styles.plusButton}
-          onPress={() => router.push("/(root)/manageCities")}
-        >
-          <Plus size={44} color="white" />
-        </TouchableOpacity>
+        {citiesWeather.length > 0 ? (
+          citiesWeather.map((weather, index) => (
+            <View key={index} style={styles.slide}>
+              {renderWeatherPage(weather)}
+            </View>
+          ))
+        ) : (
+          <View style={styles.slide}>
+            <Text style={styles.noDataText}>
+              No cities added yet...pull down to refresh
+            </Text>
+          </View>
+        )}
+      </Swiper>
+    </ScrollView>
 
-        <ScrollView
-          refreshControl={
-            <RefreshControl refreshing={refresh} onRefresh={handleRefresh} />
-          }
+    <TouchableOpacity
+      style={styles.micButton}
+      onPress={() => setModalVisible(true)}
+    >
+      <Mic size={28} color="white" />
+    </TouchableOpacity>
+    <Modal
+          animationType="slide"
+          transparent
+          visible={modalVisible}
+          onRequestClose={handleModalClose}
         >
-          <Swiper
-            loop={false}
-            showsPagination={true}
-            paginationStyle={styles.pagination}
-            dotStyle={styles.dot}
-            activeDotStyle={styles.activeDot}
-          >
-            {citiesWeather.length > 0 ? (
-              citiesWeather.map((weather, index) => (
-                <View key={index} style={styles.slide}>
-                  {renderWeatherPage(weather)}
-                </View>
-              ))
-            ) : (
-              <View style={styles.slide}>
-                <Text style={styles.noDataText}>
-                  No cities added yet...pull down to refresh
-                </Text>
-              </View>
-            )}
-          </Swiper>
-        </ScrollView>
-
-      <TouchableOpacity
-               style={styles.micButton}
-               onPress={() => setModalVisible(true)}
-             >
-               <Mic size={28} color="white" />
-             </TouchableOpacity>
-             <Modal
-  animationType="slide"
-  transparent
-  visible={modalVisible}
-  onRequestClose={handleModalClose}
->
   <View style={styles.modalOverlay}>
     <View style={styles.modalContent}>
       <Mic size={48} color="#007AFF" />
@@ -562,7 +599,7 @@ async function sendToGemini(prompt: string, userText: string): Promise<string> {
           <Text style={styles.loadingText}>Waiting for assistant's response...</Text>
         </View>
       ) : assisreply ? (
-        <Text style={styles.transcriptText}>Assistant: {assistext}</Text>
+        <Text style={styles.transcriptText}> {assistext}</Text>
       ) : null}
 
       <TouchableOpacity
@@ -590,61 +627,43 @@ async function sendToGemini(prompt: string, userText: string): Promise<string> {
 };
 
 const styles = StyleSheet.create({
-  container: {
+   // Main Container Styles
+   container: {
     flex: 1,
   },
   slide: {
     flex: 1,
     justifyContent: "center",
   },
-  loadingContainer: {
-    alignItems: "center",
-    marginTop: 20,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: "#007AFF",
-    marginTop: 10,
-    textAlign: "center",
-  },
   weatherContainer: {
-    alignItems: "center",
-    paddingVertical: 36,
+    flex: 1,
+    minHeight: '100%',
   },
-  transcriptText: {
-    fontSize: 16,
-    textAlign: "center",
-    marginVertical: 10,
-    color: "#333",
+  weatherContent: {
+    alignItems: 'center',
+    paddingBottom: 100,
+    paddingTop: 20,
   },
-  forecastContainer: {
-    width: "100%",
-    paddingHorizontal: 20,
-    marginTop: 20,
-  },
+
+  // Header Information Styles
   cityText: {
     fontSize: 36,
     fontWeight: "bold",
     color: "#fff",
     textAlign: "center",
     marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
   countryText: {
     fontSize: 24,
     color: "#fff",
     textAlign: "center",
     marginBottom: 16,
-  },
-  recordButtonText: {
-    color: "white",
-    fontSize: 16,
-  },
-  recordButton: {
-    backgroundColor: "#007AFF",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 5,
-    marginTop: 20,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
   tempText: {
     fontSize: 48,
@@ -652,30 +671,110 @@ const styles = StyleSheet.create({
     color: "#fff",
     textAlign: "center",
     marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
   weatherText: {
     fontSize: 20,
     color: "#fff",
     textAlign: "center",
     marginVertical: 10,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
+
+  // Current Conditions Card Styles
+  currentConditionsCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 15,
+    padding: 15,
+    width: '90%',
+    marginVertical: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  conditionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  conditionItem: {
+    width: '48%',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+  },
+  conditionLabel: {
+    fontSize: 14,
+    color: '#fff',
+    opacity: 0.8,
+  },
+  conditionValue: {
+    fontSize: 18,
+    color: '#fff',
+    fontWeight: 'bold',
+    marginTop: 5,
+  },
+
+  // Forecast Card Styles
+  forecastCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 15,
+    padding: 15,
+    width: '90%',
+    marginTop: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  forecastRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  forecastDay: {
+    fontSize: 16,
+    color: '#fff',
+    flex: 1,
+  },
+  forecastTemp: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+
+  // Section Titles
+  sectionTitle: {
+    fontSize: 20,
+    color: '#fff',
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
+
+  // Navigation and Control Styles
   plusButton: {
     position: "absolute",
     top: 30,
     right: 20,
     zIndex: 1,
     padding: 8,
-  },
-  forecastRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 10,
-    borderBottomWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.3)",
-  },
-  forecastText: {
-    fontSize: 20,
-    color: "#fff",
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    borderRadius: 22,
   },
   pagination: {
     bottom: 100,
@@ -703,15 +802,17 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: "#007AFF",
+    backgroundColor: "rgba(0, 122, 255, 0.9)",
     justifyContent: "center",
     alignItems: "center",
     elevation: 5,
     shadowColor: "#000",
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.3,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 4,
   },
+
+  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -721,9 +822,14 @@ const styles = StyleSheet.create({
   modalContent: {
     width: "90%",
     backgroundColor: "white",
-    borderRadius: 10,
+    borderRadius: 20,
     padding: 20,
     alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   listeningText: {
     fontSize: 20,
@@ -737,6 +843,18 @@ const styles = StyleSheet.create({
     marginVertical: 16,
     color: "#333",
   },
+  recordButton: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  recordButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "500",
+  },
   closeButton: {
     backgroundColor: "#007AFF",
     paddingVertical: 12,
@@ -749,18 +867,46 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
   },
+
+  // Loading and Error States
+  loadingContainer: {
+    alignItems: "center",
+    marginTop: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#007AFF",
+    marginTop: 10,
+    textAlign: "center",
+  },
   errorText: {
     fontSize: 18,
     color: "#fff",
     textAlign: "center",
     marginTop: 20,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
   noDataText: {
     fontSize: 20,
     color: "#fff",
     textAlign: "center",
     marginBottom: 20,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
+
+  // Transcript Styles
+  transcriptText: {
+    fontSize: 16,
+    textAlign: "center",
+    marginVertical: 10,
+    color: "#333",
+    paddingHorizontal: 15,
+  },
+
 });
 
 export default HomeScreen;
