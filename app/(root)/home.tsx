@@ -102,7 +102,7 @@ const HomeScreen = () => {
       }
 
       const response = await fetch(
-        `http://dataservice.accuweather.com/forecasts/v1/daily/5day/${city.key}?apikey=${ACCUWEATHER_API_KEY}&metric=true`,
+        `http://dataservice.accuweather.com/forecasts/v1/daily/5day/${city.key}?apikey=${ACCUWEATHER_API_KEY}&metric=true&details=true`,
       );
 
       if (!response.ok) {
@@ -125,6 +125,7 @@ const HomeScreen = () => {
       }
 
       const forecasts = data.DailyForecasts.map((forecast: any) => ({
+        icon:forecast.Day.Icon,
         day: new Date(forecast.Date).toLocaleDateString("en-US", {
           weekday: "long",
         }),
@@ -451,7 +452,8 @@ const handleModalClose = () => {
               {weatherInfo.key && forecast[weatherInfo.key] ? (
                 forecast[weatherInfo.key].map((item, index) => (
                   <View key={index} style={styles.forecastRow}>
-                    <Text style={styles.forecastDay}>{item.day}</Text>
+                    {/* in here  {item.icon} should be mapped to an array of images loaded from assets to match numbers */}
+                    <Text style={styles.forecastDay}>{item.icon}{item.day}</Text>
                     <Text style={styles.forecastTemp}>{`${item.high}°/${item.low}°`}</Text>
                   </View>
                 ))
