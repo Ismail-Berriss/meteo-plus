@@ -1,4 +1,3 @@
-import onboardingPlaceholder from "@/assets/images/onboarding-placeholder.jpg";
 import morning from "@/assets/images/morning.jpg";
 import morning_list from "@/assets/images/morning_list.jpg";
 
@@ -7,14 +6,30 @@ import onb2 from "@/assets/images/onb2.png";
 import onb3 from "@/assets/images/onb3.png";
 import onb4 from "@/assets/images/onb4.png";
 
+import cloud from "@/assets/images/cloud.png";
+import emptyStar from "@/assets/images/emptyStar.png";
+import fullStar from "@/assets/images/fullStar.png";
+import heavyrain from "@/assets/images/heavyrain.png";
+import mist from "@/assets/images/mist.png";
+import moderaterain from "@/assets/images/moderaterain.png";
+import partlycloudy from "@/assets/images/partlycloudy.png";
+import sun from "@/assets/images/sun.png";
+
 export const images = {
-  onboardingPlaceholder,
   onb1,
   onb2,
   onb3,
   onb4,
   morning,
   morning_list,
+  cloud,
+  emptyStar,
+  fullStar,
+  heavyrain,
+  mist,
+  moderaterain,
+  partlycloudy,
+  sun,
 };
 
 export const onboarding = [

@@ -18,10 +18,11 @@ interface WeatherForecast {
 interface WeatherInfo {
   name: string;
   country: string;
+  type: string;
   temperature: number;
   weatherText: string;
   windSpeed: number;
-  humidity:number;
+  humidity: number;
   realFeel: number;
-  uvIndex:number;
+  uvIndex: number;
 }
