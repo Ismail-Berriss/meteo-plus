@@ -13,6 +13,9 @@ interface WeatherForecast {
   day: string;
   high: number;
   low: number;
+  dayNumber: number;
+  monthNumber: number;
+  phrase: string;
 }
 
 interface WeatherInfo {
@@ -24,5 +27,5 @@ interface WeatherInfo {
   windSpeed: number;
   humidity: number;
   realFeel: number;
-  uvIndex: number;
+  windDirection: string;
 }

@@ -5,6 +5,7 @@ interface WeatherInfo {
   country: string;
   weatherText: string;
   temperature: number; // In Celsius
+  type: string;
 }
 
 const getCitiesFromStorage = async (): Promise<any[] | null> => {
@@ -19,7 +20,7 @@ const getCitiesFromStorage = async (): Promise<any[] | null> => {
 
 const fetchWeatherData = async (
   cityKey: string,
-  apiKey: string
+  apiKey: string,
 ): Promise<any | null> => {
   const weatherUrl = `http://dataservice.accuweather.com/currentconditions/v1/${cityKey}?apikey=${apiKey}`;
   try {
@@ -37,7 +38,7 @@ const fetchWeatherData = async (
 
 const fetchWeatherByCityKey = async (
   cityKey: string,
-  apiKey: string
+  apiKey: string,
 ): Promise<WeatherInfo | null> => {
   try {
     // Fetch weather data from API
@@ -59,11 +60,12 @@ const fetchWeatherByCityKey = async (
       country = secondCity?.country || country;
     } else {
       console.warn(
-        "Second city is null, undefined, or the cities array is empty."
+        "Second city is null, undefined, or the cities array is empty.",
       );
     }
 
-    const weatherText = weather.WeatherText || "No weather information available";
+    const weatherText =
+      weather.WeatherText || "No weather information available";
     const temperature = weather.Temperature?.Metric?.Value || 0;
 
     // Return the consolidated weather info
@@ -72,6 +74,7 @@ const fetchWeatherByCityKey = async (
       country,
       weatherText,
       temperature,
+      type: "primary",
     };
   } catch (error) {
     console.error("Error fetching weather by city key:", error);

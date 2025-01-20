@@ -17,7 +17,6 @@ import {
   Swipeable,
 } from "react-native-gesture-handler";
 import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import { Plus, Trash2, MapPin } from "lucide-react-native";
 
 import { images } from "@/constants";
@@ -52,7 +51,7 @@ const ManageCitiesScreen = () => {
   }, []);
 
   const handleRemoveCity = async (cityName: string) => {
-    // in here we can loop thro the 10 cicties we have and 
+    // in here we can loop thro the 10 cicties we have and
     const updatedCities = cities.filter((city) => city.name !== cityName);
     setCities(updatedCities);
     await AsyncStorage.setItem("cities", JSON.stringify(updatedCities));

@@ -22,7 +22,16 @@ import { Audio } from "expo-av";
 import * as Location from "expo-location";
 
 import axios from "axios";
-import { MapPin, MapPinOff, Mic, Plus } from "lucide-react-native";
+import {
+  Compass,
+  Droplets,
+  MapPin,
+  MapPinOff,
+  Mic,
+  Plus,
+  ThermometerSun,
+  Wind,
+} from "lucide-react-native";
 import { Buffer } from "buffer";
 
 import { images } from "@/constants";
@@ -137,6 +146,13 @@ const HomeScreen = () => {
         }),
         high: Math.round(forecast.Temperature.Maximum.Value),
         low: Math.round(forecast.Temperature.Minimum.Value),
+        dayNumber: new Date(forecast.Date).toLocaleDateString("en-US", {
+          day: "numeric",
+        }),
+        monthNumber: new Date(forecast.Date).toLocaleDateString("en-US", {
+          month: "numeric",
+        }),
+        phrase: forecast.Day.IconPhrase,
       }));
 
       return forecasts;
@@ -153,11 +169,31 @@ const HomeScreen = () => {
       );
       if (response.data && response.data.length > 0) {
         const condition = response.data[0];
+
+        const getWindDirection = (degree) => {
+          const directions = [
+            "North",
+            "Northeast",
+            "East",
+            "Southeast",
+            "South",
+            "Southwest",
+            "West",
+            "Northwest",
+          ];
+          const index = Math.round(degree / 45) % 8; // Dividing by 90 for cardinal directions
+          return directions[index];
+        };
+
+        console.log(
+          `directions: ${getWindDirection(condition.Wind.Direction.Degrees)}`,
+        );
+
         return {
           windSpeed: condition.Wind.Speed.Metric.Value,
           humidity: condition.RelativeHumidity,
+          windDirection: getWindDirection(condition.Wind.Direction.Degrees),
           realFeel: condition.RealFeelTemperature.Metric.Value,
-          uvIndex: condition.UVIndex,
         };
       }
       return null;
@@ -197,6 +233,7 @@ const HomeScreen = () => {
               key: city.key,
               name: city.name,
               country: city.country,
+              type: city.type,
             };
           } else if (city.latitude !== null && city.longitude !== null) {
             const weatherInfo = await fetchCityWeatherInfo(
@@ -443,7 +480,7 @@ const HomeScreen = () => {
           <View style={styles.topWeatherContainer}>
             {/* Start City Text */}
             <View style={styles.cityTextContainer}>
-              <Text style={styles.cityText}>Agadir</Text>
+              <Text style={styles.cityText}>{weatherInfo.name}</Text>
               {weatherInfo.type === "primary" ? (
                 (await Location.hasServicesEnabledAsync()) ? (
                   <MapPin color="white" size="26" />
@@ -474,17 +511,19 @@ const HomeScreen = () => {
               forecast[weatherInfo.key].map((item, index) => (
                 <View key={index} style={styles.forecastRow}>
                   {/* Start Forcast Day */}
-                  <View className="flex-row gap-2">
-                    <Image
-                      source={images.partlycloudy}
-                      style={styles.weatherIcons}
-                    />
-                    <Text style={styles.forecastText}>{item.day}</Text>
-                  </View>
+                  <Text style={styles.forecastDay}>{item.day}</Text>
+                  <Text style={styles.forecastDate}>
+                    {item.monthNumber}/{item.dayNumber}
+                  </Text>
+                  <Image
+                    source={images.partlycloudy}
+                    style={styles.weatherIcons}
+                  />
+                  <Text style={styles.forecastPhrase}>{item.phrase}</Text>
                   {/* End Forcast Day */}
 
                   {/* Start Forcast Tempreture */}
-                  <Text style={styles.forecastText}>
+                  <Text style={styles.forecastTemp}>
                     {`${item.high}°/${item.low}°`}
                   </Text>
                   {/* End Forcast Tempreture */}
@@ -497,30 +536,38 @@ const HomeScreen = () => {
           {/* End Forcast */}
 
           {/* Current Conditions Card */}
-          <View style={styles.currentConditionsCard}>
-            <Text style={styles.sectionTitle}>Current Conditions</Text>
-            <View style={styles.conditionsGrid}>
+          <View style={styles.currentConditionsContainer}>
+            <Text style={styles.currentConditionsTitle}>
+              Current Conditions
+            </Text>
+            <View style={styles.conditionsContainer}>
               <View style={styles.conditionItem}>
+                <Wind color="white" size={33} />
                 <Text style={styles.conditionLabel}>Wind Speed</Text>
                 <Text style={styles.conditionValue}>
                   {weatherInfo.windSpeed} km/h
                 </Text>
               </View>
               <View style={styles.conditionItem}>
+                <Droplets color="white" size={33} />
                 <Text style={styles.conditionLabel}>Humidity</Text>
                 <Text style={styles.conditionValue}>
                   {weatherInfo.humidity}%
                 </Text>
               </View>
               <View style={styles.conditionItem}>
+                <Compass color="white" size={33} />
+                <Text style={styles.conditionLabel}>Wind Direction</Text>
+                <Text style={styles.conditionValue}>
+                  {weatherInfo.windDirection}
+                </Text>
+              </View>
+              <View style={styles.conditionItem}>
+                <ThermometerSun color="white" size={33} />
                 <Text style={styles.conditionLabel}>Real Feel</Text>
                 <Text style={styles.conditionValue}>
                   {weatherInfo.realFeel}°C
                 </Text>
-              </View>
-              <View style={styles.conditionItem}>
-                <Text style={styles.conditionLabel}>UV Index</Text>
-                <Text style={styles.conditionValue}>{weatherInfo.uvIndex}</Text>
               </View>
             </View>
           </View>
@@ -720,9 +767,10 @@ const styles = StyleSheet.create({
     height: "100%",
     justifyContent: "space-between",
     alignItems: "center",
+    paddingVertical: 40,
   },
   topWeatherContainer: {
-    flexBasis: "50%",
+    flexBasis: "35%",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -758,72 +806,72 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
   forecastContainer: {
-    width: "100%",
-    paddingHorizontal: 20,
-    marginTop: 60,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    width: "95%",
+    paddingHorizontal: 5,
   },
   forecastRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 10,
-    borderBottomWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.3)",
+    flexBasis: "20%",
+    alignItems: "center",
+    rowGap: 5,
+  },
+  forecastDay: {
+    fontSize: 12,
+    color: "#fff",
+  },
+  forecastDate: {
+    fontSize: 12,
+    color: "white",
   },
   weatherIcons: {
     width: 30,
     height: 30,
   },
-  forecastText: {
+  forecastPhrase: {
+    color: "white",
+    fontSize: 12,
+    textAlign: "center",
+  },
+  forecastTemp: {
+    color: "white",
+    fontSize: 12,
+  },
+  // Current Conditions
+  currentConditionsContainer: {
+    width: "90%",
+    flexBasis: "37%",
+  },
+  currentConditionsTitle: {
     fontSize: 20,
     color: "#fff",
+    fontWeight: "bold",
+    marginBottom: 10,
+    textAlign: "center",
   },
-  // Current Conditions Card Styles
-  currentConditionsCard: {
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
-    borderRadius: 15,
-    padding: 15,
-    width: "90%",
-    marginVertical: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  conditionsGrid: {
+  conditionsContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
   },
   conditionItem: {
     width: "48%",
+    alignItems: "center",
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     borderRadius: 10,
     padding: 10,
     marginBottom: 10,
   },
   conditionLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#fff",
     opacity: 0.8,
   },
   conditionValue: {
-    fontSize: 18,
+    fontSize: 16,
     color: "#fff",
     fontWeight: "bold",
     marginTop: 5,
-  },
-
-  // Section Titles
-  sectionTitle: {
-    fontSize: 20,
-    color: "#fff",
-    fontWeight: "bold",
-    marginBottom: 10,
-    textAlign: "center",
-    textShadowColor: "rgba(0, 0, 0, 0.75)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
   },
 
   // Navigation and Control Styles
