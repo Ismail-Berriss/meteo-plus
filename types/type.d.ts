@@ -13,15 +13,19 @@ interface WeatherForecast {
   day: string;
   high: number;
   low: number;
+  dayNumber: number;
+  monthNumber: number;
+  phrase: string;
 }
 
 interface WeatherInfo {
   name: string;
   country: string;
+  type: string;
   temperature: number;
   weatherText: string;
   windSpeed: number;
-  humidity:number;
+  humidity: number;
   realFeel: number;
-  uvIndex:number;
+  windDirection: string;
 }

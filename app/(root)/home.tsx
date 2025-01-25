@@ -5,28 +5,43 @@ import {
   Modal,
   StyleSheet,
   Text,
+  Image,
   TouchableOpacity,
   View,
   ImageBackground,
-  ScrollView,Platform,
+  ScrollView,
+  Platform,
   RefreshControl,
 } from "react-native";
-import { getMicrophonePermission } from "@/utils/permissionsUtils";
-import axios from "axios";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Swiper from "react-native-swiper";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Mic, Plus } from "lucide-react-native";
+
 import { router } from "expo-router";
 import { Audio } from "expo-av";
-import { ACCUWEATHER_API_KEY } from "@/api";
+import * as Location from "expo-location";
+
+import axios from "axios";
+import {
+  Compass,
+  Droplets,
+  MapPin,
+  MapPinOff,
+  Mic,
+  Plus,
+  ThermometerSun,
+  Wind,
+} from "lucide-react-native";
+import { Buffer } from "buffer";
+
 import { images } from "@/constants";
+import { ACCUWEATHER_API_KEY } from "@/api";
+import { getMicrophonePermission } from "@/utils/permissionsUtils";
 import fetchCityWeatherInfo from "@/utils/getWeatherByCord";
 import fetchWeatherByCityKey from "@/utils/getWeatherByCityKey";
+import { prompt_assistant } from "@/utils/prompt";
 import City from "@/utils/model/city";
 import { WeatherForecast, WeatherInfo } from "@/types/type";
-import { prompt_assistant } from "@/utils/prompt";
-import { Buffer } from 'buffer';
 
 interface RecordingOptions {
   android: {
@@ -125,12 +140,19 @@ const HomeScreen = () => {
       }
 
       const forecasts = data.DailyForecasts.map((forecast: any) => ({
-        icon:forecast.Day.Icon,
+        icon: forecast.Day.Icon,
         day: new Date(forecast.Date).toLocaleDateString("en-US", {
           weekday: "long",
         }),
         high: Math.round(forecast.Temperature.Maximum.Value),
         low: Math.round(forecast.Temperature.Minimum.Value),
+        dayNumber: new Date(forecast.Date).toLocaleDateString("en-US", {
+          day: "numeric",
+        }),
+        monthNumber: new Date(forecast.Date).toLocaleDateString("en-US", {
+          month: "numeric",
+        }),
+        phrase: forecast.Day.IconPhrase,
       }));
 
       return forecasts;
@@ -139,23 +161,47 @@ const HomeScreen = () => {
       return null;
     }
   };
+
   const fetchCurrentConditions = async (cityKey: string) => {
     try {
       const response = await axios.get(
-        `http://dataservice.accuweather.com/currentconditions/v1/${cityKey}?apikey=${ACCUWEATHER_API_KEY}&details=true`
+        `http://dataservice.accuweather.com/currentconditions/v1/${cityKey}?apikey=${ACCUWEATHER_API_KEY}&details=true`,
       );
       if (response.data && response.data.length > 0) {
         const condition = response.data[0];
+
+        const getWindDirection = (degree) => {
+          const directions = [
+            "North",
+            "Northeast",
+            "East",
+            "Southeast",
+            "South",
+            "Southwest",
+            "West",
+            "Northwest",
+          ];
+          const index = Math.round(degree / 45) % 8; // Dividing by 90 for cardinal directions
+          return directions[index];
+        };
+
+        console.log(
+          `directions: ${getWindDirection(condition.Wind.Direction.Degrees)}`,
+        );
+
         return {
           windSpeed: condition.Wind.Speed.Metric.Value,
           humidity: condition.RelativeHumidity,
+          windDirection: getWindDirection(condition.Wind.Direction.Degrees),
           realFeel: condition.RealFeelTemperature.Metric.Value,
-          uvIndex: condition.UVIndex,
         };
       }
       return null;
     } catch (error) {
-      console.error(`Error fetching current conditions for city ${cityKey}:`, error);
+      console.error(
+        `Error fetching current conditions for city ${cityKey}:`,
+        error,
+      );
       return null;
     }
   };
@@ -171,6 +217,7 @@ const HomeScreen = () => {
       }
 
       setCities(loadedCities);
+
       const weatherPromises = loadedCities.map(async (city) => {
         try {
           if (city.key) {
@@ -186,12 +233,14 @@ const HomeScreen = () => {
               key: city.key,
               name: city.name,
               country: city.country,
+              type: city.type,
             };
           } else if (city.latitude !== null && city.longitude !== null) {
             const weatherInfo = await fetchCityWeatherInfo(
               city.latitude,
               city.longitude,
-              ACCUWEATHER_API_KEY
+              city.type,
+              ACCUWEATHER_API_KEY,
             );
             return weatherInfo;
           }
@@ -201,8 +250,8 @@ const HomeScreen = () => {
           return null;
         }
       });
-      
-          console.log(weatherPromises);
+
+      console.log(weatherPromises);
       const weatherResults = await Promise.all(weatherPromises);
       setCitiesWeather(weatherResults.filter(Boolean));
 
@@ -211,19 +260,21 @@ const HomeScreen = () => {
         loadedCities.map(async (city) => {
           const forecastData = await fetchForecastWeather(city);
           return { key: city.key, data: forecastData };
-        })
+        }),
       );
 
       // Convert array of forecasts to object with city keys
-      const forecastObject = forecasts.reduce((acc, curr) => {
-        if (curr.key && curr.data) {
-          acc[curr.key] = curr.data;
-        }
-        return acc;
-      }, {} as { [key: string]: WeatherForecast[] });
+      const forecastObject = forecasts.reduce(
+        (acc, curr) => {
+          if (curr.key && curr.data) {
+            acc[curr.key] = curr.data;
+          }
+          return acc;
+        },
+        {} as { [key: string]: WeatherForecast[] },
+      );
 
       setForecast(forecastObject);
-
     } catch (error) {
       console.error("Error fetching cities weather:", error);
       Alert.alert("Error", "Failed to fetch weather data.");
@@ -241,58 +292,64 @@ const HomeScreen = () => {
     await fetchWeatherForCities();
     setRefresh(false);
   };
-/// this is voice assistant logic
-const recordingOptions: RecordingOptions = {
-  android: {
-    extension: ".mp3",
-    outPutFormat: Audio.AndroidOutputFormat.MPEG_4,
-    androidEncoder: Audio.AndroidAudioEncoder.AAC,
-    sampleRate: 48000, // Higher sample rate for better audio quality
-    numberOfChannels: 2, // Stereo recording
-    bitRate: 192000, 
-  },
-  ios: {
-    extension: ".mp3",
-    audioQuality: Audio.IOSAudioQuality.HIGH,
-    sampleRate: 44100,
-    numberOfChannels: 2,
-    bitRate: 128000,
-    linearPCMBitDepth: 16,
-    linearPCMIsBigEndian: false,
-    linearPCMIsFloat: false,
-  },
-};
-///--------------- start recording func--------------
-const startRecording = async () => {
-  try {
-    const hasPermission = await getMicrophonePermission();
-    if (!hasPermission) {
-      Alert.alert("Permission Required", "Microphone permission is required to record audio.");
-      return;
+
+  /// this is voice assistant logic
+  const recordingOptions: RecordingOptions = {
+    android: {
+      extension: ".mp3",
+      outPutFormat: Audio.AndroidOutputFormat.MPEG_4,
+      androidEncoder: Audio.AndroidAudioEncoder.AAC,
+      sampleRate: 48000, // Higher sample rate for better audio quality
+      numberOfChannels: 2, // Stereo recording
+      bitRate: 192000,
+    },
+    ios: {
+      extension: ".mp3",
+      audioQuality: Audio.IOSAudioQuality.HIGH,
+      sampleRate: 44100,
+      numberOfChannels: 2,
+      bitRate: 128000,
+      linearPCMBitDepth: 16,
+      linearPCMIsBigEndian: false,
+      linearPCMIsFloat: false,
+    },
+  };
+
+  ///--------------- start recording func--------------
+  const startRecording = async () => {
+    try {
+      const hasPermission = await getMicrophonePermission();
+      if (!hasPermission) {
+        Alert.alert(
+          "Permission Required",
+          "Microphone permission is required to record audio.",
+        );
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      // const newRecording = new Audio.Recording();
+      //await newRecording.prepareToRecordAsync(recordingOptions);
+      //await newRecording.startAsync();
+      const { recording } = await Audio.Recording.createAsync(recordingOptions);
+      setIsRecording(true);
+      setRecording(recording);
+      //setRecording(newRecording);
+      // setIsRecording(true);
+
+      console.log("Recording started successfully");
+    } catch (error) {
+      console.error("Failed to start recording:", error);
+      Alert.alert("Error", "Failed to start recording. Please try again.");
     }
+  };
 
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-    });
-
-   // const newRecording = new Audio.Recording();
-    //await newRecording.prepareToRecordAsync(recordingOptions);
-    //await newRecording.startAsync();
-    const { recording } = await Audio.Recording.createAsync(recordingOptions);
-    setIsRecording(true);
-    setRecording(recording);
-    //setRecording(newRecording);
-   // setIsRecording(true);
-    
-    console.log("Recording started successfully");
-  } catch (error) {
-    console.error("Failed to start recording:", error);
-    Alert.alert("Error", "Failed to start recording. Please try again.");
-  }
-};
-///------------------------------------
- const stopRecording = async () => {
+  ///------------------------------------
+  const stopRecording = async () => {
     try {
       if (!recording || !isRecording) {
         console.log("No active recording to stop");
@@ -321,86 +378,90 @@ const startRecording = async () => {
   };
   //-------------------------------
 
-const uploadRecording = async (uri: string) => {
-  try {
-    setAssisVoiceloading("....getting there");
-    console.log("Starting audio upload with URI:", uri);
+  const uploadRecording = async (uri: string) => {
+    try {
+      setAssisVoiceloading("....getting there");
+      console.log("Starting audio upload with URI:", uri);
 
-    const formData = new FormData();
-    formData.append("file", {
-      uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
-      type: "audio/mp3",
-      name: "recording.mp3"
-    } as any);
+      const formData = new FormData();
+      formData.append("file", {
+        uri: Platform.OS === "ios" ? uri.replace("file://", "") : uri,
+        type: "audio/mp3",
+        name: "recording.mp3",
+      } as any);
 
-    const transcriptionResponse = await axios.post(
-      " https://3a08-160-177-12-171.ngrok-free.app/transcribe",
-      formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-          "Accept": "application/json",
+      const transcriptionResponse = await axios.post(
+        " https://3a08-160-177-12-171.ngrok-free.app/transcribe",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            Accept: "application/json",
+          },
         },
-      }
-    );
+      );
 
-    const transcript = transcriptionResponse.data.transcriptions[0]?.transcript;
-    console.log("Transcription:", transcript);
+      const transcript =
+        transcriptionResponse.data.transcriptions[0]?.transcript;
+      console.log("Transcription:", transcript);
 
-    const assistantResponseText = await sendToGemini(prompt_assistant, transcript);
+      const assistantResponseText = await sendToGemini(
+        prompt_assistant,
+        transcript,
+      );
 
-    // Update assistant reply state
-    setAssistext(assistantResponseText);
-    setAssisreply(true);
+      // Update assistant reply state
+      setAssistext(assistantResponseText);
+      setAssisreply(true);
 
-    // Initiate text-to-speech conversion and playback
-    await playAssistantResponse(assistantResponseText);
+      // Initiate text-to-speech conversion and playback
+      await playAssistantResponse(assistantResponseText);
+    } catch (error) {
+      console.error("Error uploading recording:", error);
+      Alert.alert("Error", "Failed to upload recording. Please try again.");
+    } finally {
+      setAssisloading(false);
+    }
+  };
 
-  } catch (error) {
-    console.error("Error uploading recording:", error);
-    Alert.alert("Error", "Failed to upload recording. Please try again.");
-  } finally {
-    setAssisloading(false);
-  }
-};
-const playAssistantResponse = async (text: string) => {
-  try {
-    const responseAudio = await axios.post(
-      "https://api.play.ht/api/v2/tts/stream",
-      {
-        text,
-        voice_engine: "PlayDialog",
-        voice: "s3://voice-cloning-zero-shot/d9ff78ba-d016-47f6-b0ef-dd630f59414e/female-cs/manifest.json",
-        output_format: "mp3",
-      },
-      {
-        headers: {
-          "X-USER-ID": "c4tWRiKDPdXnmkX8A4tBaMukT7k1",
-          AUTHORIZATION: "6b91dd8a331249ff9623014eb8533293",
-          accept: "audio/mpeg",
-          "content-type": "application/json",
+  const playAssistantResponse = async (text: string) => {
+    try {
+      const responseAudio = await axios.post(
+        "https://api.play.ht/api/v2/tts/stream",
+        {
+          text,
+          voice_engine: "PlayDialog",
+          voice:
+            "s3://voice-cloning-zero-shot/d9ff78ba-d016-47f6-b0ef-dd630f59414e/female-cs/manifest.json",
+          output_format: "mp3",
         },
-        responseType: "arraybuffer",
-      }
-    );
+        {
+          headers: {
+            "X-USER-ID": "c4tWRiKDPdXnmkX8A4tBaMukT7k1",
+            AUTHORIZATION: "6b91dd8a331249ff9623014eb8533293",
+            accept: "audio/mpeg",
+            "content-type": "application/json",
+          },
+          responseType: "arraybuffer",
+        },
+      );
 
-    const base64Audio = `data:audio/mp3;base64,${Buffer.from(responseAudio.data).toString('base64')}`;
-    const soundObject = new Audio.Sound();
-    await soundObject.loadAsync({ uri: base64Audio });
-    await soundObject.playAsync();
+      const base64Audio = `data:audio/mp3;base64,${Buffer.from(responseAudio.data).toString("base64")}`;
+      const soundObject = new Audio.Sound();
+      await soundObject.loadAsync({ uri: base64Audio });
+      await soundObject.playAsync();
+    } catch (error) {
+      console.error("Error during audio playback:", error);
+    }
+  };
 
-  } catch (error) {
-    console.error("Error during audio playback:", error);
-  }
-};
-//-------------------------------
-const handleModalClose = () => {
-  if (isRecording) {
-    stopRecording();
-  }
-  setModalVisible(false);
-};
-
+  //-------------------------------
+  const handleModalClose = () => {
+    if (isRecording) {
+      stopRecording();
+    }
+    setModalVisible(false);
+  };
 
   const handleMicrophonePress = () => {
     setModalVisible(true);
@@ -409,378 +470,411 @@ const handleModalClose = () => {
     }, 1500);
   };
 
-  
-  const renderWeatherPage = (weatherInfo: WeatherInfo | null) => (
+  const renderWeatherPage = async (weatherInfo: WeatherInfo | null) => (
     <View style={styles.weatherContainer}>
       {isLoading ? (
         <ActivityIndicator size="large" color="#fff" />
       ) : weatherInfo ? (
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={styles.weatherContent}>
-            {/* Main Weather Information */}
-            <Text style={styles.cityText}>{weatherInfo.name}</Text>
-            <Text style={styles.countryText}>{weatherInfo.country}</Text>
-            <Text style={styles.tempText}>{`${Math.trunc(weatherInfo.temperature!)}°C`}</Text>
-            <Text style={styles.weatherText}>{weatherInfo.weatherText}</Text>
+        <>
+          {/* Start Main Weather Information */}
+          <View style={styles.topWeatherContainer}>
+            {/* Start City Text */}
+            <View style={styles.cityTextContainer}>
+              <Text style={styles.cityText}>{weatherInfo.name}</Text>
+              {weatherInfo.type === "primary" ? (
+                (await Location.hasServicesEnabledAsync()) ? (
+                  <MapPin color="white" size="26" />
+                ) : (
+                  <MapPinOff color="white" size="26" />
+                )
+              ) : null}
+            </View>
+            {/* End City Text */}
 
-            {/* Current Conditions Card */}
-            <View style={styles.currentConditionsCard}>
-              <Text style={styles.sectionTitle}>Current Conditions</Text>
-              <View style={styles.conditionsGrid}>
-                <View style={styles.conditionItem}>
-                  <Text style={styles.conditionLabel}>Wind Speed</Text>
-                  <Text style={styles.conditionValue}>{weatherInfo.windSpeed} km/h</Text>
+            {/* Start Tempreture */}
+            <View style={styles.temperatureContainer}>
+              <Text style={styles.tempText}>
+                {Math.trunc(weatherInfo.temperature!)}
+              </Text>
+              <Text style={styles.tempIcon}>°C</Text>
+            </View>
+            {/* End Tempreture */}
+
+            {/* Start Weather Text */}
+            <Text style={styles.weatherText}>{weatherInfo.weatherText}</Text>
+            {/* End Weather Text */}
+          </View>
+
+          {/* Start Forcast */}
+          <View style={styles.forecastContainer}>
+            {weatherInfo.key && forecast[weatherInfo.key] ? (
+              forecast[weatherInfo.key].map((item, index) => (
+                <View key={index} style={styles.forecastRow}>
+                  {/* Start Forcast Day */}
+                  <Text style={styles.forecastDay}>{item.day}</Text>
+                  <Text style={styles.forecastDate}>
+                    {item.monthNumber}/{item.dayNumber}
+                  </Text>
+                  <Image
+                    source={images.partlycloudy}
+                    style={styles.weatherIcons}
+                  />
+                  <Text style={styles.forecastPhrase}>{item.phrase}</Text>
+                  {/* End Forcast Day */}
+
+                  {/* Start Forcast Tempreture */}
+                  <Text style={styles.forecastTemp}>
+                    {`${item.high}°/${item.low}°`}
+                  </Text>
+                  {/* End Forcast Tempreture */}
                 </View>
-                <View style={styles.conditionItem}>
-                  <Text style={styles.conditionLabel}>Humidity</Text>
-                  <Text style={styles.conditionValue}>{weatherInfo.humidity}%</Text>
-                </View>
-                <View style={styles.conditionItem}>
-                  <Text style={styles.conditionLabel}>Real Feel</Text>
-                  <Text style={styles.conditionValue}>{weatherInfo.realFeel}°C</Text>
-                </View>
-                <View style={styles.conditionItem}>
-                  <Text style={styles.conditionLabel}>UV Index</Text>
-                  <Text style={styles.conditionValue}>{weatherInfo.uvIndex}</Text>
-                </View>
+              ))
+            ) : (
+              <Text style={styles.errorText}>No forecast available</Text>
+            )}
+          </View>
+          {/* End Forcast */}
+
+          {/* Current Conditions Card */}
+          <View style={styles.currentConditionsContainer}>
+            <Text style={styles.currentConditionsTitle}>
+              Current Conditions
+            </Text>
+            <View style={styles.conditionsContainer}>
+              <View style={styles.conditionItem}>
+                <Wind color="white" size={33} />
+                <Text style={styles.conditionLabel}>Wind Speed</Text>
+                <Text style={styles.conditionValue}>
+                  {weatherInfo.windSpeed} km/h
+                </Text>
+              </View>
+              <View style={styles.conditionItem}>
+                <Droplets color="white" size={33} />
+                <Text style={styles.conditionLabel}>Humidity</Text>
+                <Text style={styles.conditionValue}>
+                  {weatherInfo.humidity}%
+                </Text>
+              </View>
+              <View style={styles.conditionItem}>
+                <Compass color="white" size={33} />
+                <Text style={styles.conditionLabel}>Wind Direction</Text>
+                <Text style={styles.conditionValue}>
+                  {weatherInfo.windDirection}
+                </Text>
+              </View>
+              <View style={styles.conditionItem}>
+                <ThermometerSun color="white" size={33} />
+                <Text style={styles.conditionLabel}>Real Feel</Text>
+                <Text style={styles.conditionValue}>
+                  {weatherInfo.realFeel}°C
+                </Text>
               </View>
             </View>
-
-            {/* 5-Day Forecast */}
-            <View style={styles.forecastCard}>
-              <Text style={styles.sectionTitle}>5-Day Forecast</Text>
-              {weatherInfo.key && forecast[weatherInfo.key] ? (
-                forecast[weatherInfo.key].map((item, index) => (
-                  <View key={index} style={styles.forecastRow}>
-                    {/* in here  {item.icon} should be mapped to an array of images loaded from assets to match numbers */}
-                    <Text style={styles.forecastDay}>{item.icon}{item.day}</Text>
-                    <Text style={styles.forecastTemp}>{`${item.high}°/${item.low}°`}</Text>
-                  </View>
-                ))
-              ) : (
-                <Text style={styles.errorText}>No forecast available</Text>
-              )}
-            </View>
           </View>
-        </ScrollView>
+        </>
       ) : (
         <Text style={styles.errorText}>No weather data available</Text>
       )}
     </View>
   );
-  
-const getClothsFromApi =async(prompt_user:string)=>{
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
-const GEMINI_API_KEY = "AIzaSyCcWWbB0FzPrZqeehhZPfzITbBLWYXcycY"; 
-const final_promot=prompt_assistant+prompt_user;
-const formdata= new FormData();
-formdata.append("",final_promot);
-  const assistant_text_response=await axios.post(GEMINI_API_URL,
-    
-  )
 
-} 
-/// we could send the primary city with the prompt
-async function sendToGemini(prompt: string, userText: string): Promise<string> {
-  const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent';
-  const GEMINI_API_KEY = 'AIzaSyCcWWbB0FzPrZqeehhZPfzITbBLWYXcycY'; // Replace with your actual API key.
-
-  const requestPayload = {
-    contents: [
-      {
-        parts: [
-          { text: `${prompt} ${userText}` },
-        ],
-      },
-    ],
+  const getClothsFromApi = async (prompt_user: string) => {
+    const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+    const GEMINI_API_KEY = "AIzaSyCcWWbB0FzPrZqeehhZPfzITbBLWYXcycY";
+    const final_promot = prompt_assistant + prompt_user;
+    const formdata = new FormData();
+    formdata.append("", final_promot);
+    const assistant_text_response = await axios.post(GEMINI_API_URL);
   };
+  /// we could send the primary city with the prompt
+  async function sendToGemini(
+    prompt: string,
+    userText: string,
+  ): Promise<string> {
+    const GEMINI_API_URL =
+      "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
+    const GEMINI_API_KEY = "AIzaSyCcWWbB0FzPrZqeehhZPfzITbBLWYXcycY"; // Replace with your actual API key.
 
-  try {
-    const response = await axios.post<GeminiResponse>(
-      `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
-      requestPayload,
-      {
-        headers: {
-          'Content-Type': 'application/json',
+    const requestPayload = {
+      contents: [
+        {
+          parts: [{ text: `${prompt} ${userText}` }],
         },
+      ],
+    };
+
+    try {
+      const response = await axios.post<GeminiResponse>(
+        `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
+        requestPayload,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      );
+      setAssisloading(true);
+      if (response.data.candidates?.[0]?.content?.parts?.[0]?.text) {
+        setAssisreply(true);
+        console.log(
+          "inside gem",
+          response.data.candidates?.[0]?.content.parts[0].text,
+        );
+        setAssisVoiceloading(
+          response.data.candidates?.[0]?.content.parts[0].text,
+        );
+        return response.data.candidates?.[0]?.content.parts[0].text;
+      } else {
+        throw new Error("No content generated by Gemini API");
       }
-    );
-    setAssisloading(true);
-    if (response.data.candidates?.[0]?.content?.parts?.[0]?.text) {
-      setAssisreply(true);
-      console.log("inside gem",response.data.candidates?.[0]?.content.parts[0].text);
-      setAssisVoiceloading(response.data.candidates?.[0]?.content.parts[0].text);
-      return response.data.candidates?.[0]?.content.parts[0].text;
-    } else {
-      throw new Error('No content generated by Gemini API');
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        console.error("Gemini API Error:", error.response.data);
+        throw new Error(`Gemini API Error: ${error.response.statusText}`);
+      }
+      throw new Error(`Request failed: ${error.message}`);
     }
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response) {
-      console.error('Gemini API Error:', error.response.data);
-      throw new Error(`Gemini API Error: ${error.response.statusText}`);
-    }
-    throw new Error(`Request failed: ${error.message}`);
   }
-}
- return (
-  <SafeAreaProvider>
-  <ImageBackground
-    source={images.morning}
-    style={styles.container}
-    resizeMode="cover"
-  >
-    <TouchableOpacity
-      style={styles.plusButton}
-      onPress={() => router.push("/(root)/manageCities")}
-    >
-      <Plus size={44} color="white" />
-    </TouchableOpacity>
-
-    <ScrollView
-      refreshControl={
-        <RefreshControl refreshing={refresh} onRefresh={handleRefresh} />
-      }
-    >
-      <Swiper
-        loop={false}
-        showsPagination={true}
-        paginationStyle={styles.pagination}
-        dotStyle={styles.dot}
-        activeDotStyle={styles.activeDot}
+  return (
+    <SafeAreaProvider>
+      <ImageBackground
+        source={images.morning}
+        style={styles.container}
+        resizeMode="cover"
       >
-        {citiesWeather.length > 0 ? (
-          citiesWeather.map((weather, index) => (
-            <View key={index} style={styles.slide}>
-              {renderWeatherPage(weather)}
-            </View>
-          ))
-        ) : (
-          <View style={styles.slide}>
-            <Text style={styles.noDataText}>
-              No cities added yet...pull down to refresh
-            </Text>
-          </View>
-        )}
-      </Swiper>
-    </ScrollView>
+        {/* Start Plus Icon */}
+        <TouchableOpacity
+          style={styles.plusButton}
+          onPress={() => router.push("/(root)/manageCities")}
+        >
+          <Plus size={33} color="white" />
+        </TouchableOpacity>
+        {/* End Plus Icon */}
 
-    <TouchableOpacity
-      style={styles.micButton}
-      onPress={() => setModalVisible(true)}
-    >
-      <Mic size={28} color="white" />
-    </TouchableOpacity>
-    <Modal
+        {/* Start Weather Info */}
+        <ScrollView
+          refreshControl={
+            <RefreshControl refreshing={refresh} onRefresh={handleRefresh} />
+          }
+        >
+          <Swiper
+            loop={false}
+            showsPagination={true}
+            dotStyle={styles.dot}
+            activeDotStyle={styles.activeDot}
+          >
+            {citiesWeather.length > 0 ? (
+              citiesWeather.map((weather, index) => (
+                <View key={index} style={styles.slide}>
+                  {renderWeatherPage(weather)}
+                </View>
+              ))
+            ) : (
+              <View style={styles.slide}>
+                <Text style={styles.noDataText}>
+                  No cities added yet...pull down to refresh
+                </Text>
+              </View>
+            )}
+          </Swiper>
+        </ScrollView>
+        {/* End Weather Info */}
+
+        {/* Start Voice Assistance */}
+        <TouchableOpacity
+          style={styles.micButton}
+          onPress={() => setModalVisible(true)}
+        >
+          <Mic size={28} color="white" />
+        </TouchableOpacity>
+        <Modal
           animationType="slide"
           transparent
           visible={modalVisible}
           onRequestClose={handleModalClose}
         >
-  <View style={styles.modalOverlay}>
-    <View style={styles.modalContent}>
-      <Mic size={48} color="#007AFF" />
-      {isRecording ? (
-        <Text style={styles.listeningText}>I'm listening...</Text>
-      ) : (
-        <Text style={styles.modalDescription}>
-          Tap the button and start talking!
-        </Text>
-      )}
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Mic size={48} color="#007AFF" />
+              {isRecording ? (
+                <Text style={styles.listeningText}>I'm listening...</Text>
+              ) : (
+                <Text style={styles.modalDescription}>
+                  Tap the button and start talking!
+                </Text>
+              )}
 
-      {isRecording && (
-        <ActivityIndicator
-          size="large"
-          color="#007AFF"
-          style={{ marginTop: 20 }}
-        />
-      )}
+              {isRecording && (
+                <ActivityIndicator
+                  size="large"
+                  color="#007AFF"
+                  style={{ marginTop: 20 }}
+                />
+              )}
 
-      {assisloading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.loadingText}>Waiting for assistant's response...</Text>
-        </View>
-      ) : assisreply ? (
-        <Text style={styles.transcriptText}> {assistext}</Text>
-      ) : null}
+              {assisloading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#007AFF" />
+                  <Text style={styles.loadingText}>
+                    Waiting for assistant's response...
+                  </Text>
+                </View>
+              ) : assisreply ? (
+                <Text style={styles.transcriptText}> {assistext}</Text>
+              ) : null}
 
-      <TouchableOpacity
-        style={styles.recordButton}
-        onPress={isRecording ? stopRecording : startRecording}
-      >
-        <Text style={styles.recordButtonText}>
-          {isRecording ? "Stop Recording" : "Start Recording"}
-        </Text>
-      </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.recordButton}
+                onPress={isRecording ? stopRecording : startRecording}
+              >
+                <Text style={styles.recordButtonText}>
+                  {isRecording ? "Stop Recording" : "Start Recording"}
+                </Text>
+              </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.closeButton}
-        onPress={handleModalClose}
-      >
-        <Text style={styles.closeButtonText}>Close</Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-</Modal>
-
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={handleModalClose}
+              >
+                <Text style={styles.closeButtonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+        {/* End Voice Assistance */}
       </ImageBackground>
     </SafeAreaProvider>
   );
 };
 
 const styles = StyleSheet.create({
-   // Main Container Styles
-   container: {
+  // Main Container Styles
+  container: {
     flex: 1,
+  },
+  plusButton: {
+    position: "absolute",
+    top: 25,
+    right: 7,
+    zIndex: 1,
+    padding: 8,
   },
   slide: {
     flex: 1,
     justifyContent: "center",
   },
   weatherContainer: {
-    flex: 1,
-    minHeight: '100%',
+    height: "100%",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 40,
   },
-  weatherContent: {
-    alignItems: 'center',
-    paddingBottom: 100,
-    paddingTop: 20,
+  topWeatherContainer: {
+    flexBasis: "35%",
+    justifyContent: "center",
+    alignItems: "center",
   },
-
-  // Header Information Styles
+  cityTextContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   cityText: {
     fontSize: 36,
     fontWeight: "bold",
     color: "#fff",
     textAlign: "center",
     marginBottom: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
   },
-  countryText: {
-    fontSize: 24,
-    color: "#fff",
-    textAlign: "center",
-    marginBottom: 16,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+  temperatureContainer: {
+    flexDirection: "row",
+    marginBottom: 8,
   },
   tempText: {
-    fontSize: 48,
-    fontWeight: "bold",
+    fontSize: 80,
     color: "#fff",
     textAlign: "center",
-    marginBottom: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+  },
+  tempIcon: {
+    fontSize: 35,
+    color: "white",
   },
   weatherText: {
     fontSize: 20,
     color: "#fff",
     textAlign: "center",
     marginVertical: 10,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
   },
-
-  // Current Conditions Card Styles
-  currentConditionsCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 15,
-    padding: 15,
-    width: '90%',
-    marginVertical: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+  forecastContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    width: "95%",
+    paddingHorizontal: 5,
   },
-  conditionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+  forecastRow: {
+    flexBasis: "20%",
+    alignItems: "center",
+    rowGap: 5,
+  },
+  forecastDay: {
+    fontSize: 12,
+    color: "#fff",
+  },
+  forecastDate: {
+    fontSize: 12,
+    color: "white",
+  },
+  weatherIcons: {
+    width: 30,
+    height: 30,
+  },
+  forecastPhrase: {
+    color: "white",
+    fontSize: 12,
+    textAlign: "center",
+  },
+  forecastTemp: {
+    color: "white",
+    fontSize: 12,
+  },
+  // Current Conditions
+  currentConditionsContainer: {
+    width: "90%",
+    flexBasis: "37%",
+  },
+  currentConditionsTitle: {
+    fontSize: 20,
+    color: "#fff",
+    fontWeight: "bold",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  conditionsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
   },
   conditionItem: {
-    width: '48%',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    width: "48%",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
     borderRadius: 10,
     padding: 10,
     marginBottom: 10,
   },
   conditionLabel: {
-    fontSize: 14,
-    color: '#fff',
+    fontSize: 13,
+    color: "#fff",
     opacity: 0.8,
   },
   conditionValue: {
-    fontSize: 18,
-    color: '#fff',
-    fontWeight: 'bold',
+    fontSize: 16,
+    color: "#fff",
+    fontWeight: "bold",
     marginTop: 5,
   },
 
-  // Forecast Card Styles
-  forecastCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 15,
-    padding: 15,
-    width: '90%',
-    marginTop: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  forecastRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  forecastDay: {
-    fontSize: 16,
-    color: '#fff',
-    flex: 1,
-  },
-  forecastTemp: {
-    fontSize: 16,
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-
-  // Section Titles
-  sectionTitle: {
-    fontSize: 20,
-    color: '#fff',
-    fontWeight: 'bold',
-    marginBottom: 10,
-    textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-
   // Navigation and Control Styles
-  plusButton: {
-    position: "absolute",
-    top: 30,
-    right: 20,
-    zIndex: 1,
-    padding: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
-    borderRadius: 22,
-  },
-  pagination: {
-    bottom: 100,
-  },
   dot: {
     backgroundColor: "rgba(255,255,255,0.3)",
     width: 8,
@@ -886,7 +980,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     textAlign: "center",
     marginTop: 20,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowColor: "rgba(0, 0, 0, 0.75)",
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
   },
@@ -895,7 +989,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     textAlign: "center",
     marginBottom: 20,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowColor: "rgba(0, 0, 0, 0.75)",
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
   },
@@ -908,7 +1002,6 @@ const styles = StyleSheet.create({
     color: "#333",
     paddingHorizontal: 15,
   },
-
 });
 
 export default HomeScreen;
