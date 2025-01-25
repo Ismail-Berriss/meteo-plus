@@ -24,6 +24,7 @@ const fetchCityWeatherInfo = async (
       throw new Error("Failed to fetch location data");
     }
     const locationData = await locationResponse.json();
+    console.log("this is loc resp for non city;",locationData);
 
     const name = locationData.LocalizedName;
     const country = locationData.Country.LocalizedName;

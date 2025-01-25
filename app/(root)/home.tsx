@@ -70,15 +70,14 @@ interface GeminiResponse {
     };
   }[];
 }
+
 const HomeScreen = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [forecast, setForecast] = useState<{
     [key: string]: WeatherForecast[];
   }>({});
-  const [citiesWeather, setCitiesWeather] = useState<(WeatherInfo | null)[]>(
-    [],
-  );
+  const [citiesWeather, setCitiesWeather] = useState<(WeatherInfo | null)[]>([]);
   const [cities, setCities] = useState<City[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refresh, setRefresh] = useState(false);
@@ -86,8 +85,8 @@ const HomeScreen = () => {
   const [transcript, setTranscript] = useState<string>("");
   const [assistext, setAssistext] = useState<string>("");
   const [assisreply, setAssisreply] = useState(false);
-  const [assisloading, setAssisloading] = useState(false);
-  const [assisVoiceloading, setAssisVoiceloading] = useState("....thinking");
+  const [isTextLoading, setIsTextLoading] = useState(false); // For text response
+  const [isVoiceLoading, setIsVoiceLoading] = useState(false); // For voice response
 
   const [recording, setRecording] = useState<Audio.Recording>();
 
@@ -332,14 +331,9 @@ const HomeScreen = () => {
         playsInSilentModeIOS: true,
       });
 
-      // const newRecording = new Audio.Recording();
-      //await newRecording.prepareToRecordAsync(recordingOptions);
-      //await newRecording.startAsync();
       const { recording } = await Audio.Recording.createAsync(recordingOptions);
       setIsRecording(true);
       setRecording(recording);
-      //setRecording(newRecording);
-      // setIsRecording(true);
 
       console.log("Recording started successfully");
     } catch (error) {
@@ -364,7 +358,6 @@ const HomeScreen = () => {
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
 
       const uri = recording.getURI();
-      //setRecording(null);
 
       if (!uri) {
         throw new Error("Recording URI is undefined");
@@ -376,11 +369,13 @@ const HomeScreen = () => {
       Alert.alert("Error", "Failed to process recording. Please try again.");
     }
   };
-  //-------------------------------
 
+  //-------------------------------
   const uploadRecording = async (uri: string) => {
     try {
-      setAssisVoiceloading("....getting there");
+      setIsTextLoading(true); // Start loading for text response
+      setIsVoiceLoading(true); // Start loading for voice response
+
       console.log("Starting audio upload with URI:", uri);
 
       const formData = new FormData();
@@ -390,8 +385,9 @@ const HomeScreen = () => {
         name: "recording.mp3",
       } as any);
 
+      // Step 1: Get transcription
       const transcriptionResponse = await axios.post(
-        " https://3a08-160-177-12-171.ngrok-free.app/transcribe",
+        "https://aeee-160-179-5-246.ngrok-free.app/transcribe",
         formData,
         {
           headers: {
@@ -405,6 +401,7 @@ const HomeScreen = () => {
         transcriptionResponse.data.transcriptions[0]?.transcript;
       console.log("Transcription:", transcript);
 
+      // Step 2: Get text response from Gemini
       const assistantResponseText = await sendToGemini(
         prompt_assistant,
         transcript,
@@ -413,24 +410,27 @@ const HomeScreen = () => {
       // Update assistant reply state
       setAssistext(assistantResponseText);
       setAssisreply(true);
+      setIsTextLoading(false); // Text response received, stop loading
 
-      // Initiate text-to-speech conversion and playback
+      // Step 3: Get voice response and play it
       await playAssistantResponse(assistantResponseText);
+      setIsVoiceLoading(false); // Voice response received, stop loading
     } catch (error) {
       console.error("Error uploading recording:", error);
       Alert.alert("Error", "Failed to upload recording. Please try again.");
-    } finally {
-      setAssisloading(false);
+      setIsTextLoading(false); // Stop loading on error
+      setIsVoiceLoading(false); // Stop loading on error
     }
   };
 
+  //-------------------------------
   const playAssistantResponse = async (text: string) => {
     try {
       const responseAudio = await axios.post(
         "https://api.play.ht/api/v2/tts/stream",
         {
           text,
-          voice_engine: "PlayDialog",
+          voice_engine: "Play3.0-mini",
           voice:
             "s3://voice-cloning-zero-shot/d9ff78ba-d016-47f6-b0ef-dd630f59414e/female-cs/manifest.json",
           output_format: "mp3",
@@ -452,6 +452,7 @@ const HomeScreen = () => {
       await soundObject.playAsync();
     } catch (error) {
       console.error("Error during audio playback:", error);
+      setIsVoiceLoading(false); // Stop loading on error
     }
   };
 
@@ -586,6 +587,7 @@ const HomeScreen = () => {
     formdata.append("", final_promot);
     const assistant_text_response = await axios.post(GEMINI_API_URL);
   };
+
   /// we could send the primary city with the prompt
   async function sendToGemini(
     prompt: string,
@@ -613,14 +615,11 @@ const HomeScreen = () => {
           },
         },
       );
-      setAssisloading(true);
+     // setAssisloading(true);
       if (response.data.candidates?.[0]?.content?.parts?.[0]?.text) {
         setAssisreply(true);
         console.log(
           "inside gem",
-          response.data.candidates?.[0]?.content.parts[0].text,
-        );
-        setAssisVoiceloading(
           response.data.candidates?.[0]?.content.parts[0].text,
         );
         return response.data.candidates?.[0]?.content.parts[0].text;
@@ -635,6 +634,7 @@ const HomeScreen = () => {
       throw new Error(`Request failed: ${error.message}`);
     }
   }
+
   return (
     <SafeAreaProvider>
       <ImageBackground
@@ -712,16 +712,30 @@ const HomeScreen = () => {
                 />
               )}
 
-              {assisloading ? (
+              {/* Show loading for text response */}
+              {isTextLoading && (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color="#007AFF" />
                   <Text style={styles.loadingText}>
-                    Waiting for assistant's response...
+                    Waiting for assistant's text response...
                   </Text>
                 </View>
-              ) : assisreply ? (
-                <Text style={styles.transcriptText}> {assistext}</Text>
-              ) : null}
+              )}
+
+              {/* Show loading for voice response */}
+              {isVoiceLoading && (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#007AFF" />
+                  <Text style={styles.loadingText}>
+                    Waiting for assistant's voice response...
+                  </Text>
+                </View>
+              )}
+
+              {/* Show assistant's response */}
+              {assisreply && !isTextLoading && !isVoiceLoading && (
+                <Text style={styles.transcriptText}>{assistext}</Text>
+              )}
 
               <TouchableOpacity
                 style={styles.recordButton}

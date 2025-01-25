@@ -19,6 +19,8 @@ const saveLocationToAsyncStorage = async (location: UserLocation) => {
       ACCUWEATHER_API_KEY,
     );
     console.log("City weather info:", city);
+    console.log("city key of coord ",city.key);
+
     const selectedCity = new City(
       city?.key || "", // Handle missing key
       city?.name || "", // Handle missing name
