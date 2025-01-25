@@ -334,7 +334,7 @@ const uploadRecording = async (uri: string) => {
     } as any);
 
     const transcriptionResponse = await axios.post(
-      "https://7e58-196-119-60-6.ngrok-free.app/transcribe",
+      " https://3a08-160-177-12-171.ngrok-free.app/transcribe",
       formData,
       {
         headers: {
