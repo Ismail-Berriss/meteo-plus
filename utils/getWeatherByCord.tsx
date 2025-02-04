@@ -20,6 +20,7 @@ const fetchCityWeatherInfo = async (
   try {
     // Step 1: Get location info
     const locationResponse = await fetch(locationSearchUrl);
+    console.log("this is loc resp for city;",locationResponse.status);
     if (!locationResponse.ok) {
       throw new Error("Failed to fetch location data");
     }

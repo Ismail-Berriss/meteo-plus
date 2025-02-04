@@ -1,5 +1,6 @@
 import morning from "@/assets/images/morning.jpg";
 import morning_list from "@/assets/images/morning_list.jpg";
+import rainbg from "@/assets/images/rain_bg.gif";
 
 import onb1 from "@/assets/images/onb1.png";
 import onb2 from "@/assets/images/onb2.png";
@@ -14,6 +15,8 @@ import mist from "@/assets/images/mist.png";
 import moderaterain from "@/assets/images/moderaterain.png";
 import partlycloudy from "@/assets/images/partlycloudy.png";
 import sun from "@/assets/images/sun.png";
+import msunny from "@/assets/images/5370426.png";
+import sunnybg from "@/assets/images/night_cloudy.jpg";
 
 export const images = {
   onb1,
@@ -21,6 +24,8 @@ export const images = {
   onb3,
   onb4,
   morning,
+  rainbg,
+  sunnybg,
   morning_list,
   cloud,
   emptyStar,
@@ -30,8 +35,19 @@ export const images = {
   moderaterain,
   partlycloudy,
   sun,
+  msunny
 };
+export const weatherIconMap = {
+  1: images.sun, // Sunny
+  3: images.partlycloudy, // Partly Cloudy
+  6: images.cloud, // Cloudy
+  11: images.mist, // Fog/Mist
+  12: images.moderaterain, // Showers
+  13: images.heavyrain, // Heavy Rain
+  2: images.msunny, // Heavy Rain
 
+  // Add more mappings based on AccuWeather icon codes
+};
 export const onboarding = [
   {
     id: 1,

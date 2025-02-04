@@ -42,7 +42,7 @@ import fetchWeatherByCityKey from "@/utils/getWeatherByCityKey";
 import { prompt_assistant } from "@/utils/prompt";
 import City from "@/utils/model/city";
 import { WeatherForecast, WeatherInfo } from "@/types/type";
-
+import {weatherIconMap} from "@/constants";
 interface RecordingOptions {
   android: {
     extension: string;
@@ -517,10 +517,11 @@ const HomeScreen = () => {
                     {item.monthNumber}/{item.dayNumber}
                   </Text>
                   <Image
-                    source={images.partlycloudy}
+                    source={weatherIconMap[item.icon]|| images.cloud}
                     style={styles.weatherIcons}
+                    
                   />
-                  <Text style={styles.forecastPhrase}>{item.phrase}</Text>
+                  <Text style={styles.forecastPhrase}>{item.phrase} {item.icon} </Text>
                   {/* End Forcast Day */}
 
                   {/* Start Forcast Tempreture */}
@@ -638,7 +639,7 @@ const HomeScreen = () => {
   return (
     <SafeAreaProvider>
       <ImageBackground
-        source={images.morning}
+        source={images.sunnybg}
         style={styles.container}
         resizeMode="cover"
       >

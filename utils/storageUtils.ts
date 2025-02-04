@@ -16,6 +16,7 @@ const saveLocationToAsyncStorage = async (location: UserLocation) => {
     const city: CityWeatherInfo = await fetchCityWeatherInfo(
       location.getLatitude(),
       location.getLongitude(),
+      "primary",
       ACCUWEATHER_API_KEY,
     );
     console.log("City weather info:", city);
